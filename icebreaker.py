@@ -270,8 +270,7 @@ def create_passwords(args):
             passwords = [line.rstrip() for line in f]
     else:
         season_pw = create_season_pw()
-        #other_pw = "P@ssw0rd"
-        other_pw = "Qwerty1"
+        other_pw = "P@ssw0rd"
         passwords = [season_pw, other_pw]
 
     return passwords
@@ -489,8 +488,7 @@ def create_john_cmd(hash_format, hash_file):
     cmd.append(path)
     form = '--format={}'.format(hash_format)
     cmd.append(form)
-    #wordlist = '--wordlist=submodules/merged.txt'
-    wordlist = '--wordlist=deleteme' ##1111111111111111111
+    wordlist = '--wordlist=submodules/merged.txt'
     cmd.append(wordlist)
     cmd.append('--rules')
     cmd.append(hash_file)
