@@ -12,10 +12,6 @@ echo "\n[*] Running: ../../impacket/"
 cd ../../impacket/
 echo "\n[*] Running: python2 setup.py install"
 python2 setup.py install
-echo "\n[*] Running: tar xf merged.txt.tar.gz"
-tar xf merged.txt.tar.gz
-echo "\n[*] Running: rm merged.txt.tar.gz"
-rm merged.txt.tar.gz
 echo "\n[*] Running: pip2 install ldap3"
 pip2 install ldap3
 echo "\n[*] Running: pipenv install --three"
