@@ -1,5 +1,5 @@
-echo "\n[*] Running: apt-get install python-pip"
-apt-get install python2 python3-dev python-pip
+echo "\n[*] Running: apt-get install python3-dev python-pip"
+apt-get install python3-dev python-pip
 echo "\n[*] Running: pip install pipenv"
 pip install pipenv
 echo "\n[*] Running: git submodule init"
@@ -8,7 +8,9 @@ echo "\n[*] Running: git submodule update --recursive"
 git submodule update --recursive
 echo "\n[*] Running: cd submodules/JohnTheRipper/src && ./configure && make"
 cd submodules/JohnTheRipper/src && ./configure && make
-echo "\n[*] Running: ../../impacket/"
+echo "\n[*] Running: apt-get remove python-impacket"
+apt-get remove python-impacket
+echo "\n[*] Running: cd ../../impacket/"
 cd ../../impacket/
 echo "\n[*] Running: python2 setup.py install"
 python2 setup.py install
