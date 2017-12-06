@@ -1,0 +1,8 @@
+*.pyc
+*.swp
+*.nmap
+*.gnmap
+*.xml
+*.txt
+ntlmrelay-hashes_ntlmv2
+ntlmrelay-hashes_ntlmv1
