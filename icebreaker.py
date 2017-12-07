@@ -777,8 +777,6 @@ def main(report, args):
             users_pws = smb_reverse_brute(loop, hosts, args)
             if users_pws != None:
                 log_pwds(users_pws)
-    else:
-        print('[-] No SMB hosts to attack with RID cycling')
 
 
     # ATTACK 2: LLMNR poisoning
@@ -807,7 +805,7 @@ def main(report, args):
             print('[*] Attack 3: NTLM relay')
             ntlmrelay_proc = run_relay_attack()
         else:
-            print('[-] No SMB hosts to attack with ntlmrelay')
+            sys.exit('[-] No SMB hosts to attack with ntlmrelay')
 
     # CTRL-C handler
     signal.signal(signal.SIGINT, signal_handler)
