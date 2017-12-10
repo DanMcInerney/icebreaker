@@ -641,13 +641,16 @@ def get_ntlmrelay_hashes(line):
 
 def format_mimi_data(dom, user, auth, hash_or_pw, prev_hashes, prev_pwds):
     user_pw = user+':'+auth
-    print('[!] {} found! {}'.format(hash_or_pw, user_pw))
-    # log_pwds requires format {ip:[user_pw, user_pw2]}
-    log_pwds({dom:[user_pw]})
     if hash_or_pw == 'Password':
-        prev_pwds.append(user_pw)
+        if user_pw not in prev_pwds:
+            prev_pwds.append(user_pw)
+            # log_pwds requires format {ip:[user_pw, user_pw2]}
+            log_pwds({dom:[user_pw]})
+            print('[!] {} found! {}'.format(hash_or_pw, user_pw))
     else:
-        prev_hashes.append(user_pw)
+        if user_pw not in prev_hashes:
+            prev_hashes.append(user_pw)
+            print('[!] {} found! {}'.format(hash_or_pw, user_pw))
 
     return prev_pwds, prev_hashes
 
@@ -820,7 +823,9 @@ def main(report, args):
             # check for errors
             #error = check_ntlmrelay_error(line, file_lines)
             if line.startswith('  ') or line.startswith('Traceback'):
-                print(line.strip())
+                # First few lines of mimikatz logo start with '   ' and have #### in them
+                if '####' not in line:
+                    print(line.strip())
 
             # ntlmrelayx output
             if re.search('\[.\]', line):
@@ -833,7 +838,7 @@ def main(report, args):
                 # PASS HASH INTO PREV_HASHES AND STUFF
 
             # Parse mimikatz
-            prev_pwds, prev_hashes, mimi_data = parse_mimikatz(prev_pwds, mimi_data, line)
+            prev_pwds, prev_hashes, mimi_data = parse_mimikatz(prev_pwds, prev_hashes, mimi_data, line)
 
 if __name__ == "__main__":
     args = parse_args()
