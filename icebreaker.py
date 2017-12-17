@@ -821,8 +821,8 @@ def main(report, args):
         for line in file_lines:
 
             # check for errors
-            #error = check_ntlmrelay_error(line, file_lines)
-            if line.startswith('  ') or line.startswith('Traceback'):
+            #error = check_ntlmrelay_error(line, file_lines)            mimikatz error
+            if line.startswith('  ') or line.startswith('Traceback') or line.startswith('ERROR'):
                 # First few lines of mimikatz logo start with '   ' and have #### in them
                 if '####' not in line:
                     print(line.strip())
@@ -852,3 +852,9 @@ if __name__ == "__main__":
     # TO DO
     # create crack_relay_hashes
     # Also figure out whether ridenum from github needs python2 or 3
+    # add jenkins/websphere deserialization
+    # why does john not crack the hashes responder captured on marcello's network; check phone pictures for paste
+    # check netlmrelay output for succeeeded command and add icebreaker:password to found-passwords
+    #   [*] Executed specified command on host: 192.168.10.22
+    # quick 2 password bruteforce on repsonder usernames
+
