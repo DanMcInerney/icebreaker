@@ -689,7 +689,6 @@ def cleanup_resp(resp_proc, prev_pwds):
     '''
     Kill responder and move the log file
     '''
-    ####111111 Add a john check for all the NTLM
     resp_proc.kill()
     path = 'submodules/Responder/logs/Responder-Session.log'
     timestamp = str(time.time())
@@ -752,15 +751,9 @@ def do_ntlmrelay(identifier, prev_hashes, prev_pwds):
         '''
         print('\n[-] CTRL-C caught, cleaning up and closing')
 
-        print('111111111')
-        try:
-            print('222222222')
-            cleanup_resp(resp_proc, prev_pwds)
-            ntlmrelay_proc.kill()
-        except NameError:
-            raise
+        cleanup_resp(resp_proc, prev_pwds)
+        ntlmrelay_proc.kill()
 
-        print('33333333')
         # Cleanup hash files
         ntlm_files = []
         for fname in os.listdir(os.getcwd()):
@@ -861,5 +854,5 @@ if __name__ == "__main__":
     # Also figure out whether ridenum from github needs python2 or 3
     # add jenkins/websphere deserialization
     # why does john not crack the hashes responder captured on marcello's network; check phone pictures for paste
-    # quick 2 password bruteforce on repsonder usernames
+    # quick 2 password bruteforce on responder usernames
 
