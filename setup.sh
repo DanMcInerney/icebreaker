@@ -1,5 +1,5 @@
-echo "\n[*] Running: apt-get install python3-dev python-pip"
-apt-get install python3-dev python-pip
+echo "\n[*] Running: apt-get install python3-dev python-pip libssl-dev -y"
+apt-get install python3-dev python-pip libssl-dev -y
 echo "\n[*] Running: pip install pipenv"
 pip install pipenv
 echo "\n[*] Running: git submodule init"
