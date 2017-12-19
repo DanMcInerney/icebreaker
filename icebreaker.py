@@ -11,13 +11,13 @@ import asyncio
 import argparse
 import functools
 import netifaces
-from netaddr import IPNetwork, AddrFormatError
 from datetime import datetime
 from itertools import zip_longest
 from libnmap.process import NmapProcess
-from subprocess import Popen, PIPE, check_output, CalledProcessError
 from asyncio.subprocess import PIPE, STDOUT
+from netaddr import IPNetwork, AddrFormatError
 from libnmap.parser import NmapParser, NmapParserException
+from subprocess import Popen, PIPE, check_output, CalledProcessError
 # Prevent JTR error in VMWare
 os.environ['CPUID_DISABLE'] = '1'
 
@@ -363,7 +363,7 @@ def smb_reverse_brute(loop, hosts, args):
 
     # Gather usernames using ridenum.py
     print('[*] Checking for usernames. This may take a bit...')
-    ridenum_cmd = 'python2 submodules/ridenum/ridenum.py {} 500 50000 | tee logs/ridenum.log'
+    ridenum_cmd = 'python2 submodules/ridenum/ridenum.py {} 500 50000 | tee -a logs/ridenum.log'
     ridenum_cmds = create_cmds(null_hosts, ridenum_cmd)
     print('[*] Example command that will run: '+ridenum_cmds[0].split('&& ')[1])
     ridenum_output = async_get_outputs(loop, ridenum_cmds)
