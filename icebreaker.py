@@ -705,7 +705,7 @@ def parse_ntlmrelay_line(identifier, line, successful_auth, prev_hashes):
     if line.startswith('  ') or line.startswith('Traceback') or line.startswith('ERROR'):
         # First few lines of mimikatz logo start with '   ' and have #### in them
         if '####' not in line:
-            print(line.strip())
+            print('    '+line.strip())
 
     # ntlmrelayx output
     if re.search('\[.\]', line):
@@ -851,8 +851,8 @@ if __name__ == "__main__":
 
 # WHERE I LEFT OFF
     # TO DO
-    # Also figure out whether ridenum from github needs python2 or 3
-    # add jenkins/websphere deserialization
+    # add jenkins/websphere deserialization?
     # why does john not crack the hashes responder captured on marcello's network; check phone pictures for paste
     # quick 2 password bruteforce on responder usernames
+    # LNK into open shares prior to Responder
 
