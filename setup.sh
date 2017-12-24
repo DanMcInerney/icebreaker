@@ -1,4 +1,4 @@
-echo "\n[*] Running: apt-get install python3-dev python-pip libssl-dev smbclient -y"
+echo "\n[*] Running: apt-get install python3-dev python-pip libssl-dev -y"
 apt-get install python3-dev python-pip libssl-dev smbclient -y
 echo "\n[*] Running: pip install pipenv"
 pip install pipenv
@@ -19,4 +19,3 @@ pipenv install --three
 echo '\n[*] KALI USERS: run "apt-get remove python-impacket" before running icebreaker'
 echo '\n[*] Run "pipenv shell" before running icebreaker'
 echo '\n[*] Example usage: ./icebreaker.py -l targets.txt'
-
