@@ -905,21 +905,24 @@ def cleanup_hash_files():
         if re.search('NTLMv(1|2)-hashes-.*\.txt', fname):
             ntlm_files.append(fname)
 
-    #for fname in os.listdir(os.getcwd()+'/submodules/Responder/logs'):
-    #    if re.search('v(1|2).*\.txt', fname):
-    #        ntlm_files.append(fname)
+    for fname in os.listdir(os.getcwd()+'/submodules/Responder/logs'):
+        if re.search('v(1|2).*\.txt', fname):
+            ntlm_files.append(fname)
 
     for fname in ntlm_files:
-        if 'v1' in fname:
-            with open(fname) as infile1:
-                v1_file = open('NTLMv1-hashes.txt', 'a+')
-                v1_file.write(infile1.read())
-                os.rename(fname, 'logs/'+fname)
-        elif 'v2' in fname:
-            with open(fname) as infile2:
-                v2_file = open('NTLMv2-hashes.txt', 'a+')
-                v2_file.write(infile2.read())
-                os.rename(fname, 'logs/'+fname)
+        try:
+            if 'v1' in fname:
+                with open(fname) as infile1:
+                    v1_file = open('NTLMv1-hashes.txt', 'a+')
+                    v1_file.write(infile1.read())
+                    os.rename(fname, 'logs/'+fname)
+            elif 'v2' in fname:
+                with open(fname) as infile2:
+                    v2_file = open('NTLMv2-hashes.txt', 'a+')
+                    v2_file.write(infile2.read())
+                    os.rename(fname, 'logs/'+fname)
+        except:
+            continue
 
 def do_ntlmrelay(identifier, prev_creds, args):
     '''
