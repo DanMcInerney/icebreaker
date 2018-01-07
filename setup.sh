@@ -16,6 +16,6 @@ echo "\n[*] Running: pip2 install ldap3"
 pip2 install ldap3
 echo "\n[*] Running: pipenv install --three"
 pipenv install --three
-echo '\n[*] KALI USERS: run "apt-get remove python-impacket" before running icebreaker'
-echo '\n[*] Run "pipenv shell" before running icebreaker'
-echo '\n[*] Example usage: ./icebreaker.py -l targets.txt'
+echo "\n[*] KALI USERS: run "apt-get remove python-impacket" before running icebreaker"
+echo "\n[*] Run "pipenv shell" before running icebreaker"
+echo "\n[*] Example usage: ./icebreaker.py -l targets.txt"
