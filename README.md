@@ -6,7 +6,7 @@ Break the ice with that cute Active Directory environment over there. Automates 
   * Uses Nmap to find NULL SMB sessions
   * Performs asynchronous RID cycling to find valid usernames
   * Performs a 2 password reverse bruteforce of found usernames
-  * Passwords tested: P@ssw0rd and <season><year>, e.g., Winter2018
+  * Passwords tested: P@ssw0rd and \<season\>\<year\>, e.g., Winter2018
 * SCF file upload
   * Uses Nmap to find anonymously writeable shares on the network
   * Writes an SCF file to the share with a file icon that points to your machine
