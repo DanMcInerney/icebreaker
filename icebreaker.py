@@ -830,7 +830,8 @@ def parse_responder_log(args, prev_lines, prev_creds):
                     if new_hash:
                         if 'crack' not in args.skip.lower():
                             john_proc = crack_hashes(new_hash)
-                            prev_creds = get_cracked_pwds(prev_creds)
+
+    prev_creds = get_cracked_pwds(prev_creds)
 
     return prev_creds, new_lines
 
@@ -1014,30 +1015,17 @@ def cleanup_hash_files():
     '''
     Puts all the hash files of each type into one file
     '''
-    ntlm_files = []
-    for fname in os.listdir(os.getcwd()):
-        if re.search('NTLMv(1|2)-hashes-.*\.txt', fname):
-            ntlm_files.append(fname)
+    resp_hash_folder = os.getcwd()+'/submodules/Responder/logs'
+    hash_folder = os.getcwd()+'/hashes'
 
-    for fname in os.listdir(os.getcwd()+'/submodules/Responder/logs'):
+
+    for fname in os.listdir(resp_hash_folder):
         if re.search('v(1|2).*\.txt', fname):
-            ntlm_files.append(fname)
 
-    for fname in ntlm_files:
-        try:
-            if 'v1' in fname:
-                with open(fname) as infile1:
-                    v1_file = open('NTLMv1-hashes.txt', 'a+')
-                    v1_file.write(infile1.read())
-                    os.rename(fname, 'logs/'+fname)
-            elif 'v2' in fname:
-                with open(fname) as infile2:
-                    v2_file = open('NTLMv2-hashes.txt', 'a+')
-                    v2_file.write(infile2.read())
-                    os.rename(fname, 'logs/'+fname)
-        except:
-            continue
+            if not os.path.isdir(hash_folder):
+                os.mkdir(hash_folder)
 
+            os.rename(resp_hash_folder+'/'+fname, hash_folder+'/'+fname)
 
 def main(report, args):
     '''
