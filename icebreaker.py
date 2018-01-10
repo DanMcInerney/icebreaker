@@ -32,7 +32,7 @@ def parse_args():
     parser.add_argument("-x", "--xml", help="Path to Nmap XML file")
     parser.add_argument("-p", "--password-list", help="Path to password list file")
     parser.add_argument("-s", "--skip", default='', help="Skip [rid/scf/responder/ntlmrelay/crack] where the first 4 options correspond to attacks 1-4")
-    parser.add_argument("-r", "--respondertime", default='10', help="Number of minutes to run the LLMNR/Responder attack; defaults to 10m")
+    parser.add_argument("-t", "--time", default='10', help="Number of minutes to run the LLMNR/Responder attack; defaults to 10m")
     return parser.parse_args()
 
 def parse_nmap(args):
@@ -1075,7 +1075,7 @@ def main(report, args):
         time.sleep(2)
 
         # Check for hashes for set amount of time
-        timeout = time.time() + 60 * int(args.respondertime)
+        timeout = time.time() + 60 * int(args.time)
         try:
             while time.time() < timeout:
                 prev_creds, new_lines = parse_responder_log(args, prev_lines, prev_creds)
