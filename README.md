@@ -40,7 +40,7 @@ Read from Nmap XML file
 
 Skip all four attacks
 
-```sudo ./icebreaker.py -x nmapscan.xml -s rid,scf,llmnr,ntlmrelay
+```sudo ./icebreaker.py -x nmapscan.xml -s rid,scf,llmnr,ntlmrelay```
 
 Run attack 3, LLMNR poisoning, for 30 minutes before moving on to attack 4, SMB relaying
 
