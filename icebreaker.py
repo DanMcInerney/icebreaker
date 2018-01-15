@@ -598,7 +598,7 @@ def run_proc(cmd):
 
     # mitm6 cmd is 'mitm6' with no options
     if 'mitm6' in cmd_split:
-        filename = cmd_split[0]
+        filename = cmd_split[0] + '.log'
     else:
         for x in cmd_split:
             if 'submodules/' in x:
