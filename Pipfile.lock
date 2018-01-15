@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "e37e3473a26465e3b29f9ee3a9cd8222585a75d226804758af2d7dd3d6ccc66b"
+            "sha256": "adacd5122386031c9e82582e6d1078ad369fdbc3ae8c217df491e1c970f34f8c"
         },
         "host-environment-markers": {
             "implementation_name": "cpython",
@@ -233,11 +233,11 @@
             "markers": "python_version < '3.5'",
             "version": "==1.6"
         },
-        "scapy": {
+        "scapy-python3": {
             "hashes": [
-                "sha256:9d3b0293dcdc2cc42eedacbc9003038109558c4b5c5e4a3fa01b8ef5762f1eb0"
+                "sha256:8760991a67162f43af4d9e64828bcefc100ba88859b75177ae9f7ace56e58186"
             ],
-            "version": "==2.3.3"
+            "version": "==0.23"
         },
         "simplegeneric": {
             "hashes": [

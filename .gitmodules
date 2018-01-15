@@ -7,9 +7,6 @@
 [submodule "submodules/impacket"]
 	path = submodules/impacket
 	url = https://github.com/CoreSecurity/impacket/
-[submodule "submodules/Hob0Rules"]
-	path = submodules/Hob0Rules
-	url = https://github.com/praetorian-inc/Hob0Rules
 [submodule "submodules/JohnTheRipper"]
 	path = submodules/JohnTheRipper
 	url = https://github.com/magnumripper/JohnTheRipper
