@@ -608,6 +608,7 @@ def run_proc(cmd):
     print('[*] Running: {}'.format(cmd))
     f = open('logs/'+filename, 'a+')
     proc = Popen(cmd_split, stdout=f, stderr=STDOUT)
+
     return proc
 
 def create_john_cmd(hash_format, hash_file):
@@ -886,8 +887,7 @@ def cleanup_mitm6(mitm6_proc):
     '''
     pid = mitm6_proc.pid
     os.kill(pid, signal.SIGINT)
-    print(mitm6_proc.poll())
-    if not mitm6_proc.poll()
+    if not mitm6_proc.poll():
         print('[*] Waiting on mitm6 to cleanly shut down...')
 
 def get_user_from_ntlm_hash(ntlm_hash):
