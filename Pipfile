@@ -1,11 +1,15 @@
 [[source]]
+
 url = "https://pypi.python.org/simple"
 verify_ssl = true
 
+
 [packages]
+
 netaddr = "*"
 pexpect = "*"
 asyncio = "*"
 python-libnmap = "*"
 ipython = "*"
 netifaces = "*"
+"mitm6" = "*"

