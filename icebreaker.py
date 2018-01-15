@@ -890,6 +890,10 @@ def cleanup_mitm6(mitm6_proc):
     if not mitm6_proc.poll():
         print('[*] Waiting on mitm6 to cleanly shut down...')
 
+    arp_file = 'arp.cache'
+    if os.path.isfile(arp_file):
+        os.remove(arp_file)
+
 def get_user_from_ntlm_hash(ntlm_hash):
     '''
     Gets the username in form of LAB\\uame from ntlm hash
@@ -1000,7 +1004,7 @@ def do_ntlmrelay(prev_creds, args):
     ########## CTRL-C HANDLER ##############################
 
     mimi_data = {'dom':None, 'user':None, 'ntlm':None, 'pw':None}
-    print('[*] ntlmrelayx.py output:')
+    print('\n[*] ntlmrelayx.py output:')
     ntlmrelay_file = open('logs/ntlmrelayx.py.log', 'r')
     file_lines = follow_file(ntlmrelay_file)
 
