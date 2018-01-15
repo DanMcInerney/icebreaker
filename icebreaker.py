@@ -585,10 +585,10 @@ def run_proc(cmd):
     Runs single commands
     ntlmrelayx needs the -c "powershell ... ..." cmd to be one arg tho
     '''
-
     # Set up ntlmrelayx commands
     # only ntlmrelayx has a " in it
     dquote_split = cmd.split('"')
+
     if len(dquote_split) > 1:
         cmd_split = dquote_split[0].split()
         ntlmrelayx_remote_cmd = dquote_split[1]
@@ -596,10 +596,15 @@ def run_proc(cmd):
     else:
         cmd_split = cmd.split()
 
-    for x in cmd_split:
-        if 'submodules/' in x:
-            filename = x.split('/')[-1] + '.log'
-            break
+    # mitm6 cmd is 'mitm6' with no options
+    if 'mitm6' in cmd_split:
+        filename = cmd_split[0]
+    else:
+        for x in cmd_split:
+            if 'submodules/' in x:
+                filename = x.split('/')[-1] + '.log'
+                break
+
     print('[*] Running: {}'.format(cmd))
     f = open('logs/'+filename, 'a+')
     proc = Popen(cmd_split, stdout=f, stderr=STDOUT)
@@ -882,7 +887,7 @@ def cleanup_mitm6(mitm6_proc):
     '''
     pid = mitm6_proc.pid
     os.kill(pid, signal.SIGINT)
-    if not p.poll():
+    if not pid.poll():
         print('[*] Waiting on mitm6 to cleanly shut down...')
 
 def get_user_from_ntlm_hash(ntlm_hash):
@@ -965,7 +970,7 @@ def do_ntlmrelay(prev_creds, args, domains):
     resp_proc, ntlmrelay_proc = run_relay_attack(domains)
 
     if 'dns' not in args.skip:
-        print('\n[*] Attack 5: IPv6 DNS Poison'
+        print('\n[*] Attack 5: IPv6 DNS Poison')
         mitm6_proc = run_ipv6_dns_poison()
 
     ########## CTRL-C HANDLER ##############################
