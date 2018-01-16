@@ -23,7 +23,7 @@ Break the ice with that cute Active Directory environment over there. Automates 
 * IPv6 DNS poison
   * Uses mitm6 and ntlmrelayx.py to poison IPv6 DNS and capture user and machine hashes
   * Creates fake WPAD server with authentication
-  * Note: this can easily cause network connectivity issues for users so use spareingly
+  * Note: this can easily cause network connectivity issues for users so use sparingly
 
 #### Installation
 ```
