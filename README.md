@@ -31,9 +31,8 @@ It will perform these 5 attacks in order. RID cycling and SCF file uploads usual
 
 
 #### Installation
-```
 Note to Kali users: you will need to run 'apt-get remove python-impacket' before running the setup script
-
+```
 sudo ./setup.sh
 sudo pipenv shell
 ```
