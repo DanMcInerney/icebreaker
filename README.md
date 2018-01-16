@@ -25,6 +25,11 @@ Break the ice with that cute Active Directory environment over there. Automates 
   * Creates fake WPAD server with authentication
   * Note: this can easily cause network connectivity issues for users so use sparingly
 
+
+#### How It Works
+It will perform these 5 attacks in order. RID cycling and SCF file uploads usually go fast, then it lingers on attack 3, Repsonder.py, for 10 min by default. After that amount of time or the user-specified amount of time has passed it will move on to the final two attacks which are run in parallel. If an SCF file was successfully uploaded and a user visits that file share in Explorer, that hash will be caught by either Responder if the hash is sent while attack 3 is running or the hash will be caught by ntlmrelayx if attack 4 and 5 are running. 
+
+
 #### Installation
 ```
 Note to Kali users: you will need to run 'apt-get remove python-impacket' before running the setup script
