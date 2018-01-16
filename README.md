@@ -1,6 +1,6 @@
 icebreaker
 ------
-Break the ice with that cute Active Directory environment over there. Automates network attacks against Active Directory to deliver you piping hot plaintext credentials when you're inside the network but outside of the Active Directory environment. Performs 4 different network attacks for plaintext credentials as well as hashes. Autocracks hashes found with JohnTheRipper and the top 10 million most common passwords.
+Break the ice with that cute Active Directory environment over there. Automates network attacks against Active Directory to deliver you piping hot plaintext credentials when you're inside the network but outside of the Active Directory environment. Performs 5 different network attacks for plaintext credentials as well as hashes. Autocracks hashes found with JohnTheRipper and the top 10 million most common passwords.
 
 * RID cycling 
   * Uses Nmap to find NULL SMB sessions
@@ -16,17 +16,21 @@ Break the ice with that cute Active Directory environment over there. Automates 
   * Uses Responder.py to poison the layer 2 network and capture user hashes
   * Autocracks the hash with john and top 10 million password list
 * SMB relay
-  * Uses ntlmrelay.py + Responder.py to relay SMB hashes
+  * Uses ntlmrelay.py and Responder.py to relay SMB hashes
   * After a successful relay it will do the following on the victim machine:
     * Add an administrative user - icebreaker:P@ssword123456
     * Run an obfuscated and AMSI bypassing version of Mimikatz and parse the output for hashes and passwords
+* IPv6 DNS poison
+  * Uses mitm6 and ntlmrelayx.py to poison IPv6 DNS and capture user and machine hashes
+  * Creates fake WPAD server with authentication
+  * Note: this can easily cause network connectivity issues for users so use spareingly
 
 #### Installation
 ```
+Note to Kali users: you will need to run 'apt-get remove python-impacket' before running the setup script
+
 sudo ./setup.sh
 sudo pipenv shell
-
-Note to Kali users: you will need to run 'apt-get remove python-impacket' after running the setup script
 ```
 
 #### Usage
@@ -38,9 +42,9 @@ Read from Nmap XML file
 
 ```sudo ./icebreaker -x nmapscan.xml```
 
-Skip all four attacks
+Skip all five attacks and don't autocrack hashes
 
-```sudo ./icebreaker.py -x nmapscan.xml -s rid,scf,llmnr,ntlmrelay```
+```sudo ./icebreaker.py -x nmapscan.xml -s rid,scf,llmnr,ntlmrelay,dns,crack```
 
 Run attack 3, LLMNR poisoning, for 30 minutes before moving on to attack 4, SMB relaying
 
