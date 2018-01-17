@@ -1,7 +1,7 @@
 echo -e '\n[*] Running: apt-get install python3-dev python-pip libssl-dev -y'
 apt-get install python3-dev python-pip libssl-dev smbclient -y
 
-echo -e '\n[*] Running: pip install pipenv'
+echo -e '\n[*] Running: pip install pipenv pexpect'
 pip install pipenv
 
 echo -e '\n[*] Running: git submodule init'
