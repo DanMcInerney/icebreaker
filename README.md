@@ -27,7 +27,11 @@ Break the ice with that cute Active Directory environment over there. Automates 
 
 
 #### How It Works
-It will perform these 5 attacks in order. RID cycling and SCF file uploads usually go fast, then it lingers on attack 3, Repsonder.py, for 10 min by default. After that amount of time or the user-specified amount of time has passed it will move on to the final two attacks which are run in parallel. If an SCF file was successfully uploaded and a user visits that file share in Explorer, that hash will be caught by either Responder if the hash is sent while attack 3 is running or the hash will be caught by ntlmrelayx if attack 4 and 5 are running. 
+It will perform these 5 attacks in order. RID cycling and SCF file uploads usually go fast, then it lingers on attack 3, Repsonder.py, for 10 min by default. After that amount of time, or the user-specified amount of time has passed, it will move on to the final two attacks which are run in parallel. If an SCF file was successfully uploaded and a user visits that file share in Explorer, that hash will be caught by either Responder if the hash is sent while attack 3 is running or the hash will be caught by ntlmrelayx if attacks 4 and 5 are running. 
+
+Once ntlmrelayx relays a captured hash, it will run a base64-encoded powershell command that first adds an administrative user (icebreaker:P@ssword123456) then runs an obfuscated and AMSI-bypassing version of Mimikatz. This mimikatz output is parsed and delivered to the user in the standard output as well as in the found-passwords.txt document. 
+
+All that's left is pipe those credentials into [DeathStar](https://byt3bl33d3r.github.io/automating-the-empire-with-the-death-star-getting-domain-admin-with-a-push-of-a-button.html) and BAM you went from being a lonely outsider leering at the party going on in that Active Directory domain to being tha goddamn domain admin.
 
 
 #### Installation
