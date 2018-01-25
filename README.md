@@ -46,9 +46,9 @@ Read from a newline separated list of IP addresses
 
 ```sudo ./icebreaker -l targets.txt```
 
-Read from Nmap XML file
+Read from Nmap XML file and tell Responder to use the eth0 interface rather than the default gateway interface
 
-```sudo ./icebreaker -x nmapscan.xml```
+```sudo ./icebreaker -x nmapscan.xml -i eth0```
 
 Skip all five attacks and don't autocrack hashes
 
