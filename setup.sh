@@ -1,5 +1,6 @@
-echo -e '\n[*] Running: apt-get install python3-dev python-pip libssl-dev -y'
-apt-get install python3-dev python-pip libssl-dev smbclient -y
+echo -e '\n[*] Running: apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1g-dev -y'
+						# All of these are for Empire to work. These may not be needed in the future if Empire ever fixes its installer
+apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1g-dev -y
 
 echo -e '\n[*] Running: pip2 install pipenv pexpect mitm6 ldap3'
 pip2 install pipenv mitm6 pexpect ldap3
