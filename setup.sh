@@ -23,6 +23,15 @@ cd ../../impacket/
 echo -e '\n[*] Running: python2 setup.py install'
 python2 setup.py install
 
+echo -e '\n[*] Running: cd ../Empire/setup/'
+cd ../Empire/setup/
+
+echo -e '\n[*] Running: yes | ./install.sh'
+yes | ./install.sh
+
+echo -e '\n[*] Running: cd ../../../'
+cd ../../../
+
 echo -e '\n[*] Running: pipenv install --three'
 pipenv install --three
 

