@@ -601,6 +601,7 @@ def get_local_ip(iface):
     Gets the the local IP of an interface
     '''
     ip = netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
+    print(ip)
     return ip
 
 def run_proc(cmd):
@@ -1097,7 +1098,7 @@ def get_launcher_cmd(base_url, token):
     Also adds icebreaker user prior to running Empire launcher cmd
     '''
     stager_opts = {'StagerName':'multi/launcher', 'Listener':'DeathStar'}
-    r = requests.post(base_url + '/api/stagers?token={}'.format(token), json=stager_opts, verify=False) 
+    r = requests.post(base_url + '/api/stagers?token={}'.format(token), json=stager_opts, verify=False)
 
     if r.status_code == 200:
         # resp = {'multi/launcher':{'Output':'powershell.exe -NoP...'}
@@ -1258,3 +1259,9 @@ if __name__ == "__main__":
         exit('[-] Run as root')
     report = parse_nmap(args)
     main(report, args)
+
+# Issues
+# running empire through an xterm window inside the python3 virtualenv leads to all listener options being unicode strings and not regular strings
+# this leads to unicode errors upon agent connections and the agent fails
+# running empire through an xterm window outside the py3 virtualenv does not have this issue
+# how the fuck do you fix this
