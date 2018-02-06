@@ -645,7 +645,7 @@ def create_john_cmd(hash_format, hash_file):
     cmd.append(path)
     form = '--format={}'.format(hash_format)
     cmd.append(form)
-    wordlist = '--wordlist=submodules/10_million_password_list_top_1000000.txt'
+    wordlist = '--wordlist=19mil-7chars.txt'
     cmd.append(wordlist)
     cmd.append('--rules')
     cmd.append(hash_file)
@@ -1123,8 +1123,8 @@ def run_empire(iface):
     base_url = 'https://0.0.0.0:1337'
     user = 'icebreaker'
     passwd = 'P@ssword123456'
-    empire_cmd = 'cd submodules/Empire;python2 empire --rest --username icebreaker --password P@ssword123456'
-    ds_cmd = 'python submodules/DeathStar/DeathStar.py -u icebreaker -p P@ssword123456 -lip http://{}:8080 -lp 8080'.format(get_local_ip(iface))
+    empire_cmd = 'cd submodules/Empire;python2 empire --rest --username {} --password {}'.format(user,passwd)
+    ds_cmd = 'python submodules/DeathStar/DeathStar.py -u {} -p {} -lip http://{}:8080 -lp 8080'.format(user, passwd, get_local_ip(iface))
 
     empire_proc = run_proc_xterm(empire_cmd)
     # Time for Empire to load
@@ -1260,8 +1260,8 @@ if __name__ == "__main__":
     report = parse_nmap(args)
     main(report, args)
 
-# Issues
-# running empire through an xterm window inside the python3 virtualenv leads to all listener options being unicode strings and not regular strings
-# this leads to unicode errors upon agent connections and the agent fails
-# running empire through an xterm window outside the py3 virtualenv does not have this issue
-# how the fuck do you fix this
+# Todo
+# make the empire launcher first add administrative user
+# give it agent detection so it can try using icebreaker user if fail
+# add more common passwords for rev bruteforce Password1, <previousseason><year>
+
