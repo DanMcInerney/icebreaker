@@ -1,6 +1,10 @@
+if [ ! -f 19mil-7chars.txt ]; then
+	tar xvf 19mil-7chars.tar.gz
+fi
+
+# libssl1.0-dev libxml2-dev zlib1g-dev are all required for Empire to install properly because its installer is broken on Kali
 echo -e '\n[*] Running: apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1g-dev -y'
-						# All of these are for Empire to work. These may not be needed in the future if Empire ever fixes its installer
-apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1g-dev -y
+apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1g-dev xterm -y
 
 echo -e '\n[*] Running: pip2 install pipenv pexpect mitm6 ldap3'
 pip2 install pipenv mitm6 pexpect ldap3
@@ -9,7 +13,7 @@ echo -e '\n[*] Running: git submodule init'
 git submodule init
 
 echo -e '\n[*] Running: git submodule update --recursive'
-git submodule update --recursive
+git submodule update
 
 if [ ! -f submodules/JohnTheRipper/run/john ]; then
 	echo -e '\n[*] Running: cd submodules/JohnTheRipper/src && ./configure && make'
