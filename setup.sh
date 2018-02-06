@@ -1,3 +1,7 @@
+if [ ! -f 19mil-7chars.txt ]; then
+	tar xvf 19mil-7chars.tar.gz
+fi
+
 # libssl1.0-dev libxml2-dev zlib1g-dev are all required for Empire to install properly because its installer is broken on Kali
 echo -e '\n[*] Running: apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1g-dev -y'
 apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1g-dev xterm -y
