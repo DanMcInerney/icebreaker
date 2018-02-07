@@ -601,7 +601,6 @@ def get_local_ip(iface):
     Gets the the local IP of an interface
     '''
     ip = netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
-    print(ip)
     return ip
 
 def run_proc(cmd):

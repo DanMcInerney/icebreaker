@@ -3,9 +3,6 @@ if [ ! -f 19mil-7chars.txt ]; then
 	tar xvf 19mil-7chars.tar.gz
 fi
 
-	tar xvf 19mil-7chars.tar.gz
-fi
-
 # I haven't tested any of these except Kali
 # libssl1.0-dev libxml2-dev zlib1g-dev are all required for Empire to install properly because its installer is broken on Kali
 if lsb_release -d | grep -q "Fedora"; then
