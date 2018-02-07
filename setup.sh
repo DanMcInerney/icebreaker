@@ -1,4 +1,5 @@
 if [ ! -f 19mil-7chars.txt ]; then
+	echo -e '\n[*] Running: tar xvf 19mil-7chars.tar.gz'
 	tar xvf 19mil-7chars.tar.gz
 fi
 
@@ -40,6 +41,6 @@ cd ../../../
 echo -e '\n[*] Running: pipenv install --three'
 pipenv install --three
 
-echo -e '\n[*] KALI USERS: run "apt-get remove python-impacket" before running icebreaker'
+#echo -e '\n[*] KALI USERS: run "apt-get remove python-impacket" before running icebreaker'
 echo -e '[*] Run "pipenv shell" before running icebreaker'
 echo -e '[*] Example usage: ./icebreaker.py -l targets.txt'
