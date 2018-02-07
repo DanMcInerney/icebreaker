@@ -648,7 +648,7 @@ def create_john_cmd(hash_format, hash_file):
     cmd.append(path)
     form = '--format={}'.format(hash_format)
     cmd.append(form)
-    wordlist = '--wordlist=19mil-7chars.txt'
+    wordlist = '--wordlist=1mil-AD-passwords.txt'
     cmd.append(wordlist)
     cmd.append('--rules')
     cmd.append(hash_file)

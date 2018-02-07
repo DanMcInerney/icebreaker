@@ -1,8 +1,3 @@
-if [ ! -f 19mil-7chars.txt ]; then
-	echo -e '\n[*] Running: tar xvf 19mil-7chars.tar.gz'
-	tar xvf 19mil-7chars.tar.gz
-fi
-
 # I haven't tested any of these except Kali
 # libssl1.0-dev libxml2-dev zlib1g-dev are all required for Empire to install properly because its installer is broken on Kali
 if lsb_release -d | grep -q "Fedora"; then
@@ -32,7 +27,7 @@ apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1
 echo -e '\n[*] Running: pip2 install pipenv pexpect mitm6 ldap3'
 pip2 install pipenv mitm6 pexpect ldap3
 echo -e '\n[*] Running: pip2 install --upgrade pip2 pipenv pexpect mitm6 ldap3'
-pip2 install --upgrade pip2 pipenv mitm6 pexpect ldap3
+pip2 install --upgrade pip pipenv mitm6 pexpect ldap3
 
 echo -e '\n[*] Running: git submodule init'
 git submodule init
