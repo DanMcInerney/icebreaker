@@ -100,7 +100,6 @@ def nmap_status_printer(nmap_proc):
 
         time.sleep(1)
 
-
 def run_nse_scripts(args, hosts, nse_scripts_run):
     '''
     Run NSE scripts if they weren't run in supplied Nmap XML file
@@ -153,8 +152,15 @@ def parse_nse(hosts, args, iface):
             print('[-] No anonymously writeable shares found')
 
     if len(smb_signing_disabled_hosts) > 0:
-        for host in smb_signing_disabled_hosts:
-            write_to_file('smb-signing-disabled-hosts.txt', host+'\n', 'a+')
+        filename = 'smb-signing-disabled-hosts.txt'
+        if os.path.isfile(filename):
+            f = open(filename, 'a+')
+            lines = f.readlines()
+            f.close()
+            for host in smb_signing_disabled_hosts:
+                host = host + '\n'
+                if host not in lines:
+                    write_to_file(filename, host, 'a+')
 
 def run_smbclient(server, share_name, action, scf_filepath):
     '''
