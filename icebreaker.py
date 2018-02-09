@@ -202,7 +202,8 @@ def write_scf_files(lines, ip, args, anon_share_found, iface):
                         stdout, stderr = run_smbclient(ip, share_folder, action, scf_filepath)
                         stdout = stdout.decode('utf-8')
 
-                        if 'Error:' not in stdout and len(stdout) > 1:
+                        err_strings = ['Error:', 'Errno']
+                        if not any(x in stdout for x in err_strings) and len(stdout) > 1:
                             print('[+] Successfully wrote SCF file to: {}'.format(share))
                             write_to_file('logs/shares-with-SCF.txt', share+'\n', 'a+')
                         else:
