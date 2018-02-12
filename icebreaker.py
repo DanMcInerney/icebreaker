@@ -1096,17 +1096,19 @@ def do_ntlmrelay(prev_creds, args, iface):
     file_lines = follow_file(ntlmrelay_file)
 
     successful_auth = False
-    counter = 0
+    last_check = time.time()
     for line in file_lines:
         # Parse ntlmrelay output
         prev_creds, successful_auth = parse_ntlmrelay_line(line, successful_auth, prev_creds, args)
         # Parse mimikatz output
         prev_creds, mimi_data = parse_mimikatz(prev_creds, mimi_data, line)
 
-        # for every other line of ntlmrelay output, check for cracked passwords
-        counter = counter + 1
-        if counter % 3 == 0:
+        # Get cracked passwords at 10s intervals
+        cur_time = time.time()
+        if cur_time - last_check > 5:
             prev_creds = get_cracked_pwds(prev_creds)
+            last_check = time.time()
+
 
 def check_for_nse_scripts(hosts):
     '''
