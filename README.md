@@ -61,4 +61,5 @@ Run attack 3, LLMNR poisoning, for 30 minutes before moving on to attack 4, SMB 
 ```./icebreaker.py -x nmapscan.xml -t 30```
 
 Run Empire and DeathStar to automatically get domain admin
+
 ```./icebreaker.py -x nmapscan.xml --auto```
