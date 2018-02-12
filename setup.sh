@@ -16,6 +16,10 @@ elif lsb_release -d | grep -q "CentoS"; then
 elif lsb_release -d | grep -E "Debian|Kali|Ubuntu"; then
 	echo -e '\n[*] Running: apt-get update'
 	apt-get update 
+	# python's backports module is weird and gets confused on namespacing when Python is installed a certain unknown way
+	# pipenv will fail to build virtualenv if Python or the environment or something is installed weird because 
+	# pew.py will attempt to import a backports function and fail even though the module is installed right in pip
+	# but if we just apt-get install python-backports-shutil-get-terminal-size then that solves the problem apparently
 	echo -e '\n[*] Running: apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1g-dev xterm python-backports-shutil-get-terminal-size -y'
 	apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1g-dev xterm python-backports-shutil-get-terminal-size -y
 fi

