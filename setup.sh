@@ -16,8 +16,8 @@ elif lsb_release -d | grep -q "CentoS"; then
 elif lsb_release -d | grep -E "Debian|Kali|Ubuntu"; then
 	echo -e '\n[*] Running: apt-get update'
 	apt-get update 
-	echo -e '\n[*] Running: apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1g-dev -y'
-	apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1g-dev xterm -y
+	echo -e '\n[*] Running: apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1g-dev xterm python-backports-shutil-get-terminal-size -y'
+	apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1g-dev xterm python-backports-shutil-get-terminal-size -y
 fi
 
 echo -e '\n[*] Running: pip2 install --upgrade pip2 pipenv pexpect mitm6 ldap3'
