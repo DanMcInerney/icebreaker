@@ -1,6 +1,6 @@
 icebreaker
 ------
-Break the ice with that cute Active Directory environment over there. Automates network attacks against Active Directory to deliver you piping hot plaintext credentials when you're inside the network but outside of the Active Directory environment. Performs 5 different network attacks for plaintext credentials as well as hashes. Autocracks hashes found with JohnTheRipper and the top 10 million most common passwords.
+Break the ice with that cute Active Directory environment over there. Automates network attacks against Active Directory to deliver you plaintext credentials when you're inside the network but outside of the Active Directory environment. Performs 5 different network attacks for plaintext credentials as well as hashes. Autocracks hashes found with JohnTheRipper and a custom 1 million password wordlist specifically for Active Directory passwords.
 
 * RID cycling 
   * Uses Nmap to find NULL SMB sessions
@@ -27,36 +27,38 @@ Break the ice with that cute Active Directory environment over there. Automates 
 
 
 #### How It Works
-It will perform these 5 attacks in order. RID cycling and SCF file uploads usually go fast, then it lingers on attack 3, Repsonder.py, for 10 min by default. After that amount of time, or the user-specified amount of time has passed, it will move on to the final two attacks which are run in parallel. If an SCF file was successfully uploaded and a user visits that file share in Explorer, that hash will be caught by either Responder if the hash is sent while attack 3 is running or the hash will be caught by ntlmrelayx if attacks 4 and 5 are running. 
+It will perform the above 5 network attacks in order. RID cycling and SCF file uploads usually go fast, then it lingers on attack 3, Repsonder.py, for 10 min by default. After that amount of time, or the user-specified amount of time has passed, it will move on to the final two attacks which are run in parallel and indefinitely. 
 
-Once ntlmrelayx relays a captured hash, it will run a base64-encoded powershell command that first adds an administrative user (icebreaker:P@ssword123456) then runs an obfuscated and AMSI-bypassing version of Mimikatz. This mimikatz output is parsed and delivered to the user in the standard output as well as in the found-passwords.txt document. 
+After performing RID cycling and an asynchronous bruteforce it moves on to upload SCF files to anonymously writeable shares. If an SCF file was successfully uploaded and a user visits that file share in Explorer, the user's hash will be captured and attempted to be cracked by icebreaker. If attack 3, LLMNR poisoning via Responder, is running when this occurs then the hash is simply captured and cracked. If attack 4, SMB relay via ntlmrelayx, is running, then this hash will be relayed to other machines in the network which do not have SMB signing enabled. Relaying a hash to another machine allows us to impersonate the user whose hash we captured and if that user has administrative rights to the machine we relayed the hash to then we can perform command execution.
 
-All that's left is pipe those credentials into [DeathStar](https://byt3bl33d3r.github.io/automating-the-empire-with-the-death-star-getting-domain-admin-with-a-push-of-a-button.html) and BAM you went from being a lonely outsider leering at the party going on in that Active Directory domain to being tha goddamn domain admin.
+Once ntlmrelayx relays a captured hash it will run a base64-encoded powershell command that first adds an administrative user (icebreaker:P@ssword123456) then runs an obfuscated and AMSI-bypassing version of Mimikatz. This mimikatz output is parsed and delivered to the user in the standard output as well as in the found-passwords.txt document. 
 
+If icebreaker is run with the --auto flag, then upon reaching attack 4 icebreaker will run [Empire][https://www.powershellempire.com/] and [DeathStar](https://byt3bl33d3r.github.io/automating-the-empire-with-the-death-star-getting-domain-admin-with-a-push-of-a-button.html) in an xterm window. In this case, instead of running mimikatz on the remote box that we relayed the hash to, icebreaker will still add an administrative user but right after that it'll run Empire's powershell code to get an agent on the remote machine. DeathStar will use this agent to automate the process of acheiving domain admin. The Empire and DeathStar xterm windows will not close when you exit icebreaker.
 
 #### Installation
-Note to Kali users: you will need to run 'apt-get remove python-impacket' before running the setup script
+As root:
 ```
-sudo ./setup.sh
-sudo pipenv shell
+./setup.sh
+pipenv shell
 ```
 
 #### Usage
-Read from a newline separated list of IP addresses and instead of having ntlmrelayx add a user and mimikatz the victim upon hash relay, have it execute a custom command on the victim machine. 
+Run as root.
+Read from a newline separated list of IP addresses (single IPs or CIDR ranges) and instead of having ntlmrelayx add a user and mimikatz the victim upon hash relay, have it execute a custom command on the victim machine. 
 
-```sudo ./icebreaker -l targets.txt -c "net user /add User1 P@ssw0rd"```
+```./icebreaker -l targets.txt -c "net user /add User1 P@ssw0rd"```
 
-Read from Nmap XML file, tell Responder to use the eth0 interface rather than the default gateway interface
+Read from Nmap XML file and tell Responder to use the eth0 interface rather than the default gateway interface
 
-```sudo ./icebreaker -x nmapscan.xml -i eth0```
+```./icebreaker -x nmapscan.xml -i eth0```
 
 Skip all five attacks and don't autocrack hashes
 
-```sudo ./icebreaker.py -x nmapscan.xml -s rid,scf,llmnr,ntlmrelay,dns,crack```
+```./icebreaker.py -x nmapscan.xml -s rid,scf,llmnr,ntlmrelay,dns,crack```
 
 Run attack 3, LLMNR poisoning, for 30 minutes before moving on to attack 4, SMB relaying
 
-```sudo ./icebreaker.py -x nmapscan.xml -t 30```
+```./icebreaker.py -x nmapscan.xml -t 30```
 
 Run Empire and DeathStar to automatically get domain admin
-```sudo ./icebreaker.py -x nmapscan.xml --auto```
+```./icebreaker.py -x nmapscan.xml --auto```
