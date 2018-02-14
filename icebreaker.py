@@ -584,7 +584,11 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
     # Creates a list of unique commands which only tests
     # each username/password combo 2 times and not more
     brute_cmds = create_brute_cmds(ip_users, passwords)
-    print_info('Checking the passwords {} and {} against the users'.format(passwords[0], passwords[1]))
+    if args.password_list:
+        print_info('Checking the passwords in {} against the users'.format(args.password_list))
+    else:
+        print_info('Checking the passwords {} and {} against the users'.format(passwords[0], passwords[1]))
+
     brute_output = async_get_outputs(loop, brute_cmds)
 
     # Will always return at least an empty dict()
