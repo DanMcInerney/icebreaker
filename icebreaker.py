@@ -32,7 +32,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--hostlist", help="Host list file")
     parser.add_argument("-x", "--xml", help="Path to Nmap XML file")
-    parser.add_argument("-p", "--password-list", help="Path to password list file for attack 1's reverse bruteforce"
+    parser.add_argument("-p", "--password-list", help="Path to password list file for attack 1's reverse bruteforce")
     parser.add_argument("-s", "--skip", default='', help="Skip [rid/scf/responder/ntlmrelay/dns/crack] where the first 5 options correspond to attacks 1-5")
     parser.add_argument("-t", "--time", default='10', help="Number of minutes to run the LLMNR/Responder attack; defaults to 10m")
     parser.add_argument("-i", "--interface", help="Interface to use with Responder")
