@@ -559,7 +559,7 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
     null_sess_hosts.update(chunk_null_sess_hosts)
     if len(null_sess_hosts) == 0:
         print_bad('No null SMB sessions available')
-        return None, None, None
+        return prev_creds, prev_users, None
     else:
         null_hosts = []
         for ip in null_sess_hosts:
@@ -591,7 +591,6 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
 
     brute_output = async_get_outputs(loop, brute_cmds)
 
-    # Will always return at least an empty dict()
     prev_creds = parse_brute_output(brute_output, prev_creds)
 
     return prev_creds, prev_users, domains
@@ -1197,7 +1196,7 @@ def run_empire(iface):
     user = 'icebreaker'
     passwd = 'P@ssword123456'
     empire_cmd = 'cd submodules/Empire;python2 empire --rest --username {} --password {}'.format(user,passwd)
-    ds_cmd = 'python submodules/DeathStar/DeathStar.py -u {} -p {} -lip http://{}:8080 -lp 8080'.format(user, passwd, get_local_ip(iface))#1111
+    ds_cmd = 'python submodules/DeathStar/DeathStar.py -u {} -p {} -lip http://{}:8080 -lp 8080'.format(user, passwd, get_local_ip(iface))
 
     empire_proc = run_proc_xterm(empire_cmd)
     # Time for Empire to load
