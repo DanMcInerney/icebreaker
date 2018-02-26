@@ -1,4 +1,4 @@
-icebreaker - BETA
+icebreaker - BETA (stable release in mid March)
 ------
 Break the ice with that cute Active Directory environment over there. Automates network attacks against Active Directory to deliver you plaintext credentials when you're inside the network but outside of the Active Directory environment. Performs 5 different network attacks for plaintext credentials as well as hashes. Autocracks hashes found with JohnTheRipper and a custom 1 million password wordlist specifically for Active Directory passwords.
 
