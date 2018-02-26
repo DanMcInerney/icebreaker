@@ -60,15 +60,11 @@ Skip all five attacks and don't autocrack hashes
 
 ```./icebreaker.py -x nmapscan.xml -s rid,scf,llmnr,ntlmrelay,dns,crack```
 
-Run attack 3, LLMNR poisoning, for 30 minutes before moving on to attack 4, SMB relaying
+Run attack 3, LLMNR poisoning, for 30 minutes before moving on to attack 4, SMB relaying and use a custom password list for attack 1's reverse bruteforce
 
-```./icebreaker.py -x nmapscan.xml -t 30```
+```./icebreaker.py -x nmapscan.xml -t 30 -p /home/user/password-list.txt```
 
-Run Empire and DeathStar to automatically get domain admin after a successful hash relay via attacks 4 and 5 and use a custom password list for attack 1's reverse bruteforce
-
-```./icebreaker.py -x nmapscan.xml --auto -p /home/user/password-list.txt```
-
-My favorite usage - input Nmap XML file, skip Responder's LLMNR/NBT-NS/mDNS poisoning, and run Empire and DeathStar once attack 4 starts
+My favorite usage - input targets file, skip Responder's LLMNR/NBT-NS/mDNS poisoning, and run Empire and DeathStar once attack 4 starts
 
 ```./icebreaker.py -l targets.txt -s llmnr --auto```
 
