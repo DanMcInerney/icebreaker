@@ -69,5 +69,6 @@ Run Empire and DeathStar to automatically get domain admin after a successful ha
 ```./icebreaker.py -x nmapscan.xml --auto -p /home/user/password-list.txt```
 
 My favorite usage - input Nmap XML file, skip Responder's LLMNR/NBT-NS/mDNS poisoning, and run Empire and DeathStar once attack 4 starts
-```./icebreaker.py -x nmapscan.xml -s llmnr --auto```
+
+```./icebreaker.py -l targets.txt -s llmnr --auto```
 
