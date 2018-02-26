@@ -1,4 +1,4 @@
-icebreaker
+icebreaker - BETA (stable release in mid March)
 ------
 Break the ice with that cute Active Directory environment over there. Automates network attacks against Active Directory to deliver you plaintext credentials when you're inside the network but outside of the Active Directory environment. Performs 5 different network attacks for plaintext credentials as well as hashes. Autocracks hashes found with JohnTheRipper and a custom 1 million password wordlist specifically for Active Directory passwords.
 
@@ -60,14 +60,11 @@ Skip all five attacks and don't autocrack hashes
 
 ```./icebreaker.py -x nmapscan.xml -s rid,scf,llmnr,ntlmrelay,dns,crack```
 
-Run attack 3, LLMNR poisoning, for 30 minutes before moving on to attack 4, SMB relaying
+Run attack 3, LLMNR poisoning, for 30 minutes before moving on to attack 4, SMB relaying and use a custom password list for attack 1's reverse bruteforce
 
-```./icebreaker.py -x nmapscan.xml -t 30```
+```./icebreaker.py -x nmapscan.xml -t 30 -p /home/user/password-list.txt```
 
-Run Empire and DeathStar to automatically get domain admin after a successful hash relay via attacks 4 and 5 and use a custom password list for attack 1's reverse bruteforce
+My favorite usage - input targets file, skip Responder's LLMNR/NBT-NS/mDNS poisoning, and run Empire and DeathStar once attack 4 starts
 
-```./icebreaker.py -x nmapscan.xml --auto -p /home/user/password-list.txt```
-
-My favorite usage - input Nmap XML file, skip Responder's LLMNR/NBT-NS/mDNS poisoning, and run Empire and DeathStar once attack 4 starts
-```./icebreaker.py -x nmapscan.xml -s llmnr --auto```
+```./icebreaker.py -l targets.txt -s llmnr --auto```
 
