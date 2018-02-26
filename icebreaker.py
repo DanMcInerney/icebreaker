@@ -696,6 +696,8 @@ def create_john_cmd(hash_format, hash_file):
     cmd.append(wordlist)
     cmd.append('--rules')
     cmd.append(hash_file)
+    identifier = hash_file.split('-')[-1].split('.')[0]
+    cmd.append('--session={}'.format(identifier))
     john_cmd = ' '.join(cmd)
     return john_cmd
 
