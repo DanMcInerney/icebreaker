@@ -34,8 +34,8 @@ echo -e '\n[*] Running: git submodule update --recursive'
 git submodule update
 
 if [ ! -f submodules/JohnTheRipper/run/john ]; then
-	echo -e '\n[*] Running: cd submodules/JohnTheRipper/src && ./configure && make'
-	cd submodules/JohnTheRipper/src && ./configure && make
+	echo -e '\n[*] Running: cd submodules/JohnTheRipper/src && make clean generic'
+	cd submodules/JohnTheRipper/src && make clean generic
 else
 	cd submodules/JohnTheRipper/src
 fi
