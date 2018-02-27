@@ -20,8 +20,8 @@ elif lsb_release -d | grep -E "Debian|Kali|Ubuntu"; then
 	# pipenv will fail to build virtualenv if Python or the environment or something is installed weird because 
 	# pew.py will attempt to import a backports function and fail even though the module is installed right in pip
 	# but if we just apt-get install python-backports-shutil-get-terminal-size then that solves the problem apparently
-	echo -e '\n[*] Running: apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1g-dev xterm python-backports-shutil-get-terminal-size -y'
-	apt-get install python3-dev python-pip smbclient libssl1.0-dev libxml2-dev zlib1g-dev xterm python-backports-shutil-get-terminal-size -y
+	echo -e '\n[*] Running: apt-get install python3-dev python-pip smbclient xterm python-backports-shutil-get-terminal-size -y'
+	apt-get install python3-dev python-pip smbclient xterm python-backports-shutil-get-terminal-size -y
 fi
 
 echo -e '\n[*] Running: pip2 install --upgrade pip2 pipenv pexpect mitm6 ldap3'
