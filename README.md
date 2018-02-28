@@ -40,7 +40,8 @@ All NetNTLMv2 hashes which are captures in the techniques below are autocracked 
   * Successful relaying of a hash will result in the capture of a user's NetNTLMv2 hash which will be autocracked
   * If a user hash is relayed to a machine and that user is a local administrator, command execution will occur and the  following will be remotely performed:
     * Add an administrative user - icebreaker:P@ssword123456
-    * Run an obfuscated and AMSI bypassing version of Mimikatz and parse the output for NTLM hashes and plaintext passwords
+    * Run an obfuscated and AMSI bypassing version of Mimikatz
+    * Mimikatz output is parsed for NTLM hashes and plaintext passwords
 * IPv6 DNS poison
   * Uses mitm6 and ntlmrelayx.py to poison IPv6 DNS in order to capture NetNTLMv2 user hashes
   * Creates fake WPAD server with authentication
@@ -80,19 +81,15 @@ Read from a newline separated list of IP addresses (single IPs or CIDR ranges) a
 
 ```./icebreaker -l targets.txt -c "net user /add User1 P@ssw0rd"```
 
-Read from Nmap XML file and tell Responder to use the eth0 interface rather than the default gateway interface
+Read from a hostlist, tell Responder to use the eth0 interface rather than the default gateway interface, and let Responder run for 30m instead of the usual 10m
 
-```./icebreaker -x nmapscan.xml -i eth0```
+```./icebreaker -l targets.txt -i eth0 -t 30```
 
-Skip all five attacks and don't autocrack hashes
+Use an Nmap XML output file, skip all five attacks plus don't autocrack hashes, and use a custom password list for the reverse bruteforce attack
 
-```./icebreaker.py -x nmapscan.xml -s rid,scf,llmnr,ntlmrelay,dns,crack```
+```./icebreaker.py -x nmapscan.xml -s rid,scf,llmnr,relay,dns,crack -p /home/user/password-list.txt```
 
-Run attack 3, LLMNR poisoning, for 30 minutes before moving on to attack 4, SMB relaying and use a custom password list for attack 1's reverse bruteforce
+Fire-and-forget usage: input targets file, scrape companydomain.com for email usernames to be added to the reverse bruteforce attack, skip mitm6's IPv6 DNS poisoning, and run Empire and DeathStar once attack 4 starts in order to gain automated domain admin. The goal of this usage is to fire off the command Monday at 9am then go take a short, uninterrupted break until Friday at 5pm. We skip attack 5 (mitm6) because it can sometimes cause network issues and we don't want angry clients interrupting our hard-earned break.
 
-```./icebreaker.py -x nmapscan.xml -t 30 -p /home/user/password-list.txt```
-
-Fire-and-forget usage: input targets file, skip mitm6's IPv6 DNS poisoning, and run Empire and DeathStar once attack 4 starts in order to gain automated domain admin. The goal of this usage is to fire off the command Monday at 9am then go take a short, uninterrupted break until Friday at 5pm. We skip attack 5 (mitm6) because it can sometimes cause network issues and we don't want angry clients interrupting our hard-earned break.
-
-```./icebreaker.py -l targets.txt -s dns --auto```
+```./icebreaker.py -l targets.txt -d companydomain.com -s dns --auto```
 
