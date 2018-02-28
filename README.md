@@ -92,7 +92,7 @@ Run attack 3, LLMNR poisoning, for 30 minutes before moving on to attack 4, SMB 
 
 ```./icebreaker.py -x nmapscan.xml -t 30 -p /home/user/password-list.txt```
 
-My favorite usage - input targets file, skip Responder's LLMNR/NBT-NS/mDNS poisoning, and run Empire and DeathStar once attack 4 starts
+Fire-and-forget usage: input targets file, skip mitm6's IPv6 DNS poisoning, and run Empire and DeathStar once attack 4 starts in order to gain automated domain admin. The goal of this usage is to fire off the command Monday at 9am then go take a short, uninterrupted break until Friday at 5pm. We skip attack 5 (mitm6) because it can sometimes cause network issues and we don't want angry clients interrupting our hard-earned break.
 
-```./icebreaker.py -l targets.txt -s llmnr --auto```
+```./icebreaker.py -l targets.txt -s dns --auto```
 
