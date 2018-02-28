@@ -65,6 +65,7 @@ def parse_nmap(args):
         except FileNotFoundError:
             print_bad('Host file not found: {}'.format(args.xml))
             sys.exit()
+
     elif args.hostlist:
         hosts = []
         with open(args.hostlist, 'r') as hostlist:
@@ -75,7 +76,7 @@ def parse_nmap(args):
                     if '/' in line:
                         hosts += [str(ip) for ip in IPNetwork(line)]
                     elif '*' in line:
-                        print_bad('CIDR notation only in the host list e.g. 10.0.0.0/24')
+                        print_bad('CIDR notation only in the host list, e.g. 10.0.0.0/24')
                         sys.exit()
                     else:
                         hosts.append(line)
@@ -89,17 +90,18 @@ def parse_nmap(args):
         print_bad('Use the "-x [path/to/nmap-output.xml]" option if you already have an Nmap XML file \
 or "-l [hostlist.txt]" option to run an Nmap scan with a hostlist file.')
         sys.exit()
+
     return report
 
 def nmap_scan(hosts):
     '''
     Do Nmap scan
     '''
-    nmap_args = '-sS --script smb-security-mode,smb-enum-shares -n --max-retries 5 -p 445 -oA smb-scan'
+    nmap_args = '-sS --script smb-security-mode,smb-enum-shares -n --max-retries 5 -p 445,3268 -oA icebreaker-scan'
     nmap_proc = NmapProcess(targets=hosts, options=nmap_args, safe_mode=False)
     rc = nmap_proc.sudo_run_background()
     nmap_status_printer(nmap_proc)
-    report = NmapParser.parse_fromfile(os.getcwd()+'/smb-scan.xml')
+    report = NmapParser.parse_fromfile(os.getcwd()+'/icebreaker-scan.xml')
 
     return report
 
@@ -285,10 +287,11 @@ def local_scf_cleanup():
 
 def get_hosts(args, report):
     '''
-    Gets list of hosts with port 445 open
+    Gets list of hosts with port 445 or 3268 (to find the DC) open
     and a list of hosts with smb signing disabled
     '''
     hosts = []
+    DCs = []
 
     print_info('Parsing hosts')
     for host in report.hosts:
@@ -298,11 +301,15 @@ def get_hosts(args, report):
                 if s.port == 445:
                     if s.state == 'open':
                         hosts.append(host)
+                elif s.port == 3268:
+                    if s.state == 'open':
+                        DCs.append(host)
+
     if len(hosts) == 0:
         print_bad('No hosts with port 445 open')
         sys.exit()
 
-    return hosts
+    return hosts, DCs
 
 #def coros_pool(worker_count, commands):
 #    '''
@@ -614,7 +621,7 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
 
     # Do theHarvester for username collection
     if args.domain:
-        ip_users, prev_users = run_theHarvester(ip_users, prev_users, null_sess_hosts, args.domain, hosts[0].address)
+        ip_users, prev_users = run_theHarvester(ip_users, prev_users, null_sess_hosts, args.domain, hosts[0].address, DCs)
 
     if len(ip_users) > 0:
         # Creates a list of unique commands which only tests
@@ -631,13 +638,9 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users):
 
     return prev_creds, prev_users, domains
 
-def run_theHarvester(ip_users, prev_users, null_sess_hosts, domain, host):
+def run_theHarvester(ip_users, prev_users, null_sess_hosts, domain, host, DCs):
     '''
     Run theHarvester to collect more potential usernames
-    domain is args.domain and domains are the domains found by ridenum
-    If null sessions were found and AD domains identified, then we brute
-    against those null session IPs
-    If no domains were ID'd, we test each username against one host
     '''
     users = []
     cmd = 'python2 submodules/theHarvester/theHarvester.py -d {} -b all'.format(domain)
@@ -650,27 +653,36 @@ def run_theHarvester(ip_users, prev_users, null_sess_hosts, domain, host):
         if '@' in l and 'cmartorella@edge-security.com' not in l:
 
             user = l.split('@')[0]
-            # If we have AD domains found, use them so user = DOM\user
+            if user not in prev_users:
+                prev_users.append(user)
+                print_good('Potential user found: {}'.format(dom_user))
+
+            # First check if we ID'd any DCs
+            # If so, brute them because they don't require knowledge of the domain name
+            if len(DCs) > 0: #111
+
+            # If we have AD domains found but no DCs, use them so user = DOM\user
             if len(null_sess_hosts) > 0:
                 for key,val in null_sess_hosts.items():
                     ip = key
                     dom = val[0]
                     dom_user = dom+'\\'+user
 
+                    # This is where we're preventing duplicates in case there's lots of null sess hosts
                     if dom_user not in prev_users:
-                        prev_users.append(dom_user)
+                        prev_users.append(user)
                         if ip_users.get(ip):
                             ip_users[ip].append(dom_user)
                         else:
                             ip_users[ip] = [dom_user]
-            # No AD domains found, just use username
+
+            # No null session hosts found, no DCs found
+            # Just use the first host with port 445 open
             else:
-                if user not in prev_users:
-                    prev_users.append(user)
-                    if ip_users.get(host):
-                        ip_users[host].append(user)
-                    else:
-                        ip_users[host] = [user]
+                if ip_users.get(host):
+                    ip_users[host].append(user)
+                else:
+                    ip_users[host] = [user]
 
     return ip_users, prev_users
 
@@ -1344,7 +1356,7 @@ def main(report, args):
 
     # Returns a list of Nmap object hosts
     # So you must use host.address, for example, to get the ip
-    hosts = get_hosts(args, report)
+    hosts, DCs = get_hosts(args, report)
 
     if len(hosts) > 0:
         nse_scripts_run = check_for_nse_scripts(hosts)
