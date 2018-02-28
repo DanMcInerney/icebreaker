@@ -10,6 +10,7 @@
 [submodule "submodules/JohnTheRipper"]
 	path = submodules/JohnTheRipper
 	url = https://github.com/magnumripper/JohnTheRipper
+	branch = bleeding-jumbo
 [submodule "submodules/DeathStar"]
 	path = submodules/DeathStar
 	url = https://github.com/byt3bl33d3r/DeathStar

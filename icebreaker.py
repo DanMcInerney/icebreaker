@@ -674,7 +674,6 @@ def run_theHarvester(ip_users, prev_users, null_sess_hosts, domain, host):
 
     return ip_users, prev_users
 
-
 def log_pwds(host_user_pwds):
     '''
     Turns SMB password data {ip:[usrr_pw, user2_pw]} into a string
@@ -1194,7 +1193,6 @@ def do_ntlmrelay(prev_creds, args, iface):
             prev_creds = get_cracked_pwds(prev_creds)
             last_check = time.time()
 
-
 def check_for_nse_scripts(hosts):
     '''
     Checks if both NSE scripts were run
@@ -1422,5 +1420,3 @@ if __name__ == "__main__":
 
 # Todo
 # give it agent detection so it can try using icebreaker user if fail?
-# how to make it not open so many files when doing async subprocess and coros pool?
-
