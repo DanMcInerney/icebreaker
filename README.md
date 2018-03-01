@@ -2,7 +2,7 @@ icebreaker - BETA (stable release in mid March)
 ------
 Break the ice with that cute Active Directory environment over there. When you're cold and alone staring in at an Active Directory party but don't possess even a single AD credential to join the fun, this tool's for you.
 
-Sequentially automates 5 network attacks against Active Directory to deliver you plaintext credentials when you're on the internal network. Can also automatically acquire domain admin privileges after successfuly performing attacks four and five through the use of the --auto option.
+Sequentially automates 5 network attacks against Active Directory to deliver you plaintext credentials when you're on the internal network. Can also automatically acquire domain admin privileges after successfully performing attacks four and five through the use of the --auto option.
 
 ## Summary Details
 The following attacks are performed sequentially until the fourth and fifth attacks which run in parallel and indefinitely.
@@ -19,7 +19,7 @@ The following attacks are performed sequentially until the fourth and fifth atta
   * Exploits DNS to trick AD computers into sending their users' passwords to you
 
 ## Technical Details
-All NetNTLMv2 hashes which are captures in the techniques below are autocracked with JohnTheRipper and an AD-specific password list of 1 million in length.
+All NetNTLMv2 hashes which are captured in the techniques below are autocracked with JohnTheRipper and an AD-specific password list of 1 million in length.
 
 * Reverse bruteforce
   * Uses rpcclient to find hosts that accept null SMB sessions
@@ -38,7 +38,7 @@ All NetNTLMv2 hashes which are captures in the techniques below are autocracked 
   * Uses Nmap to identify vulnerable relay targets via the NSE script smb-security-mode
   * Vulnerable targets will have SMBv1 enabled and SMB signing disabled
   * Successful relaying of a hash will result in the capture of a user's NetNTLMv2 hash which will be autocracked
-  * If a user hash is relayed to a machine and that user is a local administrator, command execution will occur and the  following will be remotely performed:
+  * If a user hash is relayed to a machine and that user is a local administrator, command execution will occur and the following will be remotely performed:
     * Add an administrative user - icebreaker:P@ssword123456
     * Run an obfuscated and AMSI bypassing version of Mimikatz
     * Mimikatz output is parsed for NTLM hashes and plaintext passwords
@@ -64,7 +64,7 @@ Once ntlmrelayx relays a captured hash it will run a base64-encoded powershell c
 
 The final attack uses the tool mitm6 to perform a man-in-the-middle IPv6 DNS attack against the whole network. This forces hosts on the network to use the attacker's machine as their DNS server. Once set as their DNS server, the attacker serves malicious WPAD proxy setting files to the victims and gathers their NetNTLMv2 hashes. These hashes are relayed using ntlmrelayx.py for further remote code execution possibilities. One thing to note is that this attack is prone to causing issues on the network. It often causes certificate errors on client machines in the browser. It'll also likely slow the network down. The beauty of this attack, however, is that Windows AD environments are vulnerable by default.
 
-If icebreaker is run with the --auto flag, then upon reaching attack 4 icebreaker will run [Empire](https://www.powershellempire.com/) and [DeathStar](https://byt3bl33d3r.github.io/automating-the-empire-with-the-death-star-getting-domain-admin-with-a-push-of-a-button.html) in xterm windows. With this option, instead of running mimikatz on the remote host that we relayed the hash to, icebreaker will add an administrative user then run Empire's powershell launcher code to get an agent on the remote machine. DeathStar will use this agent to automate the process of acheiving domain admin. The Empire and DeathStar xterm windows will not close when you exit icebreaker.
+If icebreaker is run with the --auto flag, then upon reaching attack 4 icebreaker will run [Empire](https://www.powershellempire.com/) and [DeathStar](https://byt3bl33d3r.github.io/automating-the-empire-with-the-death-star-getting-domain-admin-with-a-push-of-a-button.html) in xterm windows. With this option, instead of running mimikatz on the remote host that we relayed the hash to, icebreaker will add an administrative user then run Empire's powershell launcher code to get an agent on the remote machine. DeathStar will use this agent to automate the process of achieving domain admin. The Empire and DeathStar xterm windows will not close when you exit icebreaker.
 
 Password cracking is done with JohnTheRipper and a custom wordlist. The origin of this list is from the [merged.txt](https://github.com/danielmiessler/SecLists/blob/601038eb4ea18c97177b43a757286d3c8a815db8/Passwords/merged.txt.tar.gz) which is every password from the SecLists GitHub account combined. The wordlist was pruned and includes no passwords with: all lowercase, all uppercase, all symbols, less than 7 characters, more than 32 characters. These rules conform to the default Active Directory password requirements and brought the list from 20 million to just over 1 million which makes password cracking extremely fast.
 
