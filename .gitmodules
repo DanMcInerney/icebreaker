@@ -17,3 +17,6 @@
 [submodule "submodules/theHarvester"]
 	path = submodules/theHarvester
 	url = https://github.com/DanMcInerney/theHarvester
+[submodule "submodules/Empire"]
+	path = submodules/Empire
+	url = https://github.com/EmpireProject/Empire
