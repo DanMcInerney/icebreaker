@@ -894,7 +894,7 @@ def parse_john_show(out, prev_creds):
 
             pw = line[1]
             host = line[2]
-            host_user_pwd = host+'\\'+user+':'+pw
+            host_user_pwd = host+' - '+user+':'+pw
             if host_user_pwd not in prev_creds:
                 prev_creds.append(host_user_pwd)
                 duplicate = check_found_passwords(host_user_pwd)
