@@ -19,5 +19,5 @@
 	url = https://github.com/DanMcInerney/theHarvester
 [submodule "submodules/Empire"]
 	path = submodules/Empire
-	url = https://github.com/EmpireProject/Empire
-	branch = dev
+	url = https://github.com/DanMcInerney/Empire
+	branch = master
