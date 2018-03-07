@@ -20,4 +20,3 @@
 [submodule "submodules/Empire"]
 	path = submodules/Empire
 	url = https://github.com/DanMcInerney/Empire
-	branch = master
