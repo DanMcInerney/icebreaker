@@ -27,6 +27,9 @@ fi
 echo -e '\n[*] Running: pip2 install --upgrade pip2 pipenv pexpect mitm6 ldap3'
 pip2 install --upgrade pip pipenv mitm6 pexpect ldap3
 
+echo -e '\n[*] Running: rm submodules/Responder/Responder.db'
+rm submodules/Responder/Responder.db
+
 echo -e '\n[*] Running: git submodule update  --init --recursive -j 7'
 git submodule update --init --recursive -j 7
 
