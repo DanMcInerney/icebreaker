@@ -1134,7 +1134,10 @@ def get_user_from_ntlm_hash(ntlm_hash):
     Gets the username in form of LAB\\uame from ntlm hash
     '''
     hash_split = ntlm_hash.split(':')
-    user = hash_split[2]+'\\'+hash_split[0]
+    try:
+        user = hash_split[2]+'\\'+hash_split[0]
+    except IndexError:
+        user = None
 
     return user
 
@@ -1159,21 +1162,21 @@ def parse_ntlmrelay_line(line, successful_auth, prev_creds, args):
         successful_auth = False
         netntlm_hash = line.split()[-1]+'\n'
         user = get_user_from_ntlm_hash(netntlm_hash)
+        if user:
+            if user not in prev_creds:
+                prev_creds.append(user)
 
-        if user not in prev_creds:
-            prev_creds.append(user)
+                if netntlm_hash.count(':') == 5:
+                    hash_type = 'NTLMv2'
+                    hashes[hash_type] = [netntlm_hash]
 
-            if netntlm_hash.count(':') == 5:
-                hash_type = 'NTLMv2'
-                hashes[hash_type] = [netntlm_hash]
+                if netntlm_hash.count(':') == 4:
+                    hash_type = 'NTLMv1'
+                    hashes[hash_type] = [netntlm_hash]
 
-            if netntlm_hash.count(':') == 4:
-                hash_type = 'NTLMv1'
-                hashes[hash_type] = [netntlm_hash]
-
-        if len(hashes) > 0:
-            if 'crack' not in args.skip.lower():
-                john_procs = crack_hashes(hashes)
+            if len(hashes) > 0:
+                if 'crack' not in args.skip.lower():
+                    john_procs = crack_hashes(hashes)
 
     if successful_auth == False:
         if ' SUCCEED' in line:
