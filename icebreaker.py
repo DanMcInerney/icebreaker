@@ -39,7 +39,7 @@ def parse_args():
     parser.add_argument("-i", "--interface", help="Interface to use with Responder")
     parser.add_argument("-c", "--command", help="Remote command to run upon successful NTLM relay")
     parser.add_argument("-d", "--domain", help="Domain to use with theHarvester to gather usernames for reverse bruteforce, e.g., google.com")
-    parser.add_argument("--auto", default='tmux', help="Start up Empire and DeathStar to automatically get domain admin using [xterm/tmux], defaults to tmux, e.g., --auto xterm")
+    parser.add_argument("--auto", help="Start up Empire and DeathStar to automatically get domain admin using [xterm/tmux], defaults to tmux, e.g., --auto xterm")
     return parser.parse_args()
 
 # Colored terminal output
@@ -1373,7 +1373,7 @@ def run_empire_deathstar(iface, args):
         ds_proc = run_proc_xterm(ds_cmd)
         # Time for DeathStar to start listener
         time.sleep(5)
-    else:
+    elif args.auto == 'tmux':
         run_tmux_procs(empire_cmd, ds_cmd)
 
     token = get_token(base_url)
