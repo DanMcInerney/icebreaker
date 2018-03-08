@@ -85,7 +85,7 @@ Read from a hostlist, tell Responder to use the eth0 interface rather than the d
 
 ```./icebreaker -l targets.txt -i eth0 -t 30```
 
-Use an Nmap XML output file, skip all five attacks plus don't autocrack hashes, and use a custom password list for the reverse bruteforce attack
+Use an Nmap XML output file, skip all five attacks plus don't autocrack hashes, and use a custom password list for the reverse bruteforce attack (note that since this example is skipping attack 1 via '-s rid' the password list specified won't even get used; this is just used as an example) 
 
 ```./icebreaker.py -x nmapscan.xml -s rid,scf,llmnr,relay,dns,crack -p /home/user/password-list.txt```
 
