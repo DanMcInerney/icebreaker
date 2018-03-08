@@ -89,7 +89,7 @@ Use an Nmap XML output file, skip all five attacks plus don't autocrack hashes, 
 
 ```./icebreaker.py -x nmapscan.xml -s rid,scf,llmnr,relay,dns,crack -p /home/user/password-list.txt```
 
-Fire-and-forget usage: input targets file, scrape companydomain.com for email usernames to be added to the reverse bruteforce attack, skip mitm6's IPv6 DNS poisoning, and run Empire and DeathStar once attack 4 starts in order to gain automated domain admin. The goal of this usage is to fire off the command Monday at 9am then go take a short, uninterrupted break until Friday at 5pm. We skip attack 5 (mitm6) because it can sometimes cause network issues and we don't want angry clients interrupting our hard-earned break.
+Fire-and-forget usage: input targets file, scrape companydomain.com for email usernames to be added to the reverse bruteforce attack, skip mitm6's IPv6 DNS poisoning, and run Empire and DeathStar in either tmux or xterm windows once attack 4 starts in order to gain automated domain admin. The goal of this usage is to fire off the command Monday at 9am then go take a short, uninterrupted break until Friday at 5pm. We skip attack 5 (mitm6) because it can sometimes cause network issues and we don't want angry clients interrupting our hard-earned break.
 
-```./icebreaker.py -l targets.txt -d companydomain.com -s dns --auto```
+```./icebreaker.py -l targets.txt -d companydomain.com -s dns --auto [tmux/xterm]```
 
