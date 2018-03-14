@@ -1,5 +1,5 @@
-icebreaker - BETA (stable release in mid March)
-------
+# icebreaker - BETA (stable release in mid March)
+
 Break the ice with that cute Active Directory environment over there. When you're cold and alone staring in at an Active Directory party but don't possess even a single AD credential to join the fun, this tool's for you.
 
 Sequentially automates 5 network attacks against Active Directory to deliver you plaintext credentials when you're on the internal network. Can also automatically acquire domain admin privileges after successfully performing attacks four and five through the use of the --auto option.
