@@ -1,4 +1,4 @@
-# icebreaker - BETA (stable release in mid March)
+# icebreaker
 
 Break the ice with that cute Active Directory environment over there. When you're cold and alone staring in at an Active Directory party but don't possess even a single AD credential to join the fun, this tool's for you.
 
