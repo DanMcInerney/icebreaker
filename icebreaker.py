@@ -122,17 +122,21 @@ def nmap_status_printer(nmap_proc):
 
         time.sleep(1)
 
-def run_nse_scripts(args, hosts, nse_scripts_run):
+def run_nse_scripts(args, hosts):
     '''
     Run NSE scripts if they weren't run in supplied Nmap XML file
     '''
-    hosts = []
-    if nse_scripts_run == False:
-        if len(hosts) > 0:
-            print_info("Running missing NSE scripts")
-            report = nmap_scan(hosts)
-            hosts = get_hosts(args, report)
-            return hosts
+    host_ips = []
+    if len(hosts) > 0:
+        for h in hosts:
+            host_ips.append(h.address)
+        print_info("Running missing NSE scripts")
+        report = nmap_scan(host_ips)
+        new_hosts, DCs = get_hosts(args, report)
+        return new_hosts, DCs
+    else:
+        print_bad('No hosts found')
+        sys.exit()
 
 def get_share(l, share):
     '''
@@ -302,10 +306,12 @@ def get_hosts(args, report):
             for s in host.services:
                 if s.port == 445:
                     if s.state == 'open':
-                        hosts.append(host)
+                        if host not in hosts:
+                            hosts.append(host)
                 elif s.port == 3268:
                     if s.state == 'open':
-                        DCs.append(host)
+                        if host not in DCs:
+                            DCs.append(host)
 
     if len(hosts) == 0:
         print_bad('No hosts with port 445 open')
@@ -1438,7 +1444,7 @@ def main(report, args):
     prev_users = []
     loop = asyncio.get_event_loop()
     passwords = create_passwords(args)
-    
+
     # Get the interface to use with Responder, also used for local IP lookup
     if args.interface:
         iface = args.interface
@@ -1454,7 +1460,7 @@ def main(report, args):
 
         # If Nmap XML shows that one or both NSE scripts weren't run, do it now
         if nse_scripts_run == False:
-            hosts = run_nse_scripts(args, hosts)
+            hosts, DCs = run_nse_scripts(args, hosts)
 
         for h in hosts:
             print_good('SMB open: {}'.format(h.address))
