@@ -1318,14 +1318,14 @@ def run_tmux_procs(empire_cmd, ds_cmd):
     pane = win.select_pane(0)
     pane.send_keys('cd {}'.format(cwd))
     pane.send_keys('pipenv shell')
-    time.sleep(4)
+    time.sleep(6)
     pane.send_keys(empire_cmd)
-    time.sleep(10)
+    time.sleep(15)
     pane = win.split_window(attach=False)
     pane.select_pane()
     pane.send_keys('cd {}'.format(cwd))
     pane.send_keys('pipenv shell')
-    time.sleep(4)
+    time.sleep(6)
     pane.send_keys(ds_cmd)
     time.sleep(5)
 
@@ -1379,7 +1379,7 @@ def run_empire_deathstar(iface, args):
     if args.auto == 'xterm':
         empire_proc = run_proc_xterm(empire_cmd)
         # Time for Empire to load
-        time.sleep(10)
+        time.sleep(15)
         ds_proc = run_proc_xterm(ds_cmd)
         # Time for DeathStar to start listener
         time.sleep(5)
