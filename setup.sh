@@ -24,8 +24,8 @@ elif lsb_release -d | grep -E "Debian|Kali|Ubuntu"; then
 	apt-get install python3-dev tmux python-pip smbclient xterm python-backports-shutil-get-terminal-size -y
 fi
 
-echo -e '\n[*] Running: pip2 install --upgrade pip2 pipenv pexpect mitm6 ldap3'
-pip2 install --upgrade pip pipenv mitm6 pexpect ldap3
+echo -e '\n[*] Running: pip2 install pexpect mitm6 ldap3'
+pip2 install --upgrade mitm6 pexpect ldap3
 
 echo -e '\n[*] Running: rm submodules/Responder/Responder.db'
 rm submodules/Responder/Responder.db
@@ -55,9 +55,7 @@ yes | ./install.sh
 echo -e '\n[*] Running: cd ../../../'
 cd ../../../
 
-echo -e '\n[*] Running: pipenv install --three'
-pipenv install --three
-
 #echo -e '\n[*] KALI USERS: run "apt-get remove python-impacket" before running icebreaker'
+echo -e '[*] Run "pipenv install --three"
 echo -e '[*] Run "pipenv shell" before running icebreaker'
 echo -e '[*] Example usage: ./icebreaker.py -l targets.txt'
