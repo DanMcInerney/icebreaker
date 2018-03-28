@@ -72,6 +72,7 @@ Password cracking is done with JohnTheRipper and a custom wordlist. The origin o
 As root:
 ```
 ./setup.sh
+pipenv install --three
 pipenv shell
 ```
 
