@@ -56,6 +56,6 @@ echo -e '\n[*] Running: cd ../../../'
 cd ../../../
 
 #echo -e '\n[*] KALI USERS: run "apt-get remove python-impacket" before running icebreaker'
-echo -e '[*] Run "pipenv install --three"
+echo -e '[*] Run "pipenv install --three"'
 echo -e '[*] Run "pipenv shell" before running icebreaker'
 echo -e '[*] Example usage: ./icebreaker.py -l targets.txt'
