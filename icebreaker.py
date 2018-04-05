@@ -396,14 +396,15 @@ def get_null_sess_hosts(output):
     null_sess_hosts = {}
     # output is a list of rpcclient output
     for out in output:
-        if 'Domain Name:' in out:
-            out = out.splitlines()
-            ip = out[0]
-                         # Just get domain name
-            dom = out[1].split()[2]
-                         # Just get domain SID
-            dom_sid = out[2].split()[2]
-            null_sess_hosts[ip] = (dom, dom_sid)
+        if out:
+            if 'Domain Name:' in out:
+                out = out.splitlines()
+                ip = out[0]
+                             # Just get domain name
+                dom = out[1].split()[2]
+                             # Just get domain SID
+                dom_sid = out[2].split()[2]
+                null_sess_hosts[ip] = (dom, dom_sid)
 
     return null_sess_hosts
 
