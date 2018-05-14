@@ -6,8 +6,8 @@ apt-get update
 # pipenv will fail to build virtualenv if Python or the environment or something is installed weird because 
 # pew.py will attempt to import a backports function and fail even though the module is installed right in pip
 # but if we just apt-get install python-backports-shutil-get-terminal-size then that solves the problem apparently
-echo -e '\n[*] Running: apt-get install python3 python python-dev lsb_release python3-dev python-pip smbclient xterm python-backports-shutil-get-terminal-size -y'
-apt-get install libicu55 libxml2-dev lib sudo python3-dev tmux python-pip smbclient xterm libssl-dev python-backports-shutil-get-terminal-size build-essential -y
+echo -e '\n[*] Running: apt-get install python3 python python-dev python3-dev python-pip smbclient xterm python-backports-shutil-get-terminal-size -y'
+apt-get install libxml2-dev lib sudo python3-dev python-pip python3-pip tmux python-pip smbclient xterm libssl-dev python-backports-shutil-get-terminal-size build-essential -y
 
 echo -e '\n[*] Running: pip2 install pexpect mitm6 ldap3'
 pip2 install --upgrade mitm6 m2crypto pexpect ldap3
