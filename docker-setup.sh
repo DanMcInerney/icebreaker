@@ -12,6 +12,8 @@ apt-get install libicu55 libxml2-dev lib sudo python3-dev tmux python-pip smbcli
 echo -e '\n[*] Running: pip2 install pexpect mitm6 ldap3'
 pip2 install --upgrade mitm6 m2crypto pexpect ldap3
 
+pip3 install --upgrade netaddr asyncio python-libnmap netifaces requests termcolor libtmux
+
 #echo -e '\n[*] Running: rm submodules/Responder/Responder.db'
 #rm submodules/Responder/Responder.db
 
