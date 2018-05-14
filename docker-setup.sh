@@ -1,7 +1,3 @@
-# I haven't tested any of these except Kali
-# libssl1.0-dev libxml2-dev zlib1g-dev are all required for Empire to install properly because its installer is broken on Kali
-echo -e '\n[*] Running: apt-get update'
-apt-get update 
 # python's backports module is weird and gets confused on namespacing when Python is installed a certain unknown way
 # pipenv will fail to build virtualenv if Python or the environment or something is installed weird because 
 # pew.py will attempt to import a backports function and fail even though the module is installed right in pip
