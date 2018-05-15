@@ -75,6 +75,7 @@ As root:
 pipenv install --three
 pipenv shell
 ```
+You might get an error after running pipenv install. Update to a version of pipenv higher than 11.9.0 if that is the case. You can git clone pipenv from github and just ```apt-get remove python-pipenv && python setup.py install``` from within the folder.
 
 #### Usage
 Run as root.
