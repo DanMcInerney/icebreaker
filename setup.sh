@@ -21,7 +21,7 @@ elif lsb_release -d | grep -E "Debian|Kali|Ubuntu"; then
 	# pew.py will attempt to import a backports function and fail even though the module is installed right in pip
 	# but if we just apt-get install python-backports-shutil-get-terminal-size then that solves the problem apparently
 	echo -e '\n[*] Running: apt-get install python3-dev python-pip smbclient xterm python-backports-shutil-get-terminal-size -y'
-	apt-get install python3-dev tmux python-pip smbclient xterm python-backports-shutil-get-terminal-size -y
+	apt-get install python3-dev libssl-dev tmux python-pip smbclient xterm python-backports-shutil-get-terminal-size -y
 fi
 
 echo -e '\n[*] Running: pip2 install pexpect mitm6 ldap3'
