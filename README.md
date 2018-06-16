@@ -80,14 +80,14 @@ pipenv shell
 You might get an error after running pipenv install. Update to a version of pipenv higher than 11.9.0 if that is the case. You can git clone pipenv from github and just ```apt-get remove python-pipenv && python setup.py install``` from within the folder.
 
 ### Docker Usage
-From the Git Repo:
+Still a few bugs to work out with the docker image so this is likely to error for you but it's almost there. From the Git Repo:
 ```
 docker build --rm -t danmcinerney/icebreaker .
 docker run danmcinery/icebreaker
 ```
 Or append the commands you'd normally add to icebreaker (don't forget to map volumes):
 ```
-docker run -v $(pwd)/logs:/icebraker/logs -v $(pwd)/hashes:/icebreaker/hashes danmcinery/icebreaker -l targets.txt -d companydomain.com -s dns --auto [tmux/xterm]
+docker run -v $(pwd)/logs:/icebreaker/logs -v $(pwd)/hashes:/icebreaker/hashes -v $(pwd)/icebreaker-scan.xml:/icebreaker/icebreaker-scan.xml -v $(pwd)/submodules:/icebreaker/submodules -e PYTHONUNBUFFERED=0 danmcinerney/icebreaker -x icebreaker-scan.xml
 ```
 **Note: You'll want to map ports for listeners with docker's `-p <host>:<container>` flag. 
 
