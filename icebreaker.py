@@ -27,7 +27,7 @@ from libnmap.parser import NmapParser, NmapParserException
 from http.server import HTTPServer as BaseHTTPServer, SimpleHTTPRequestHandler
 
 # Debug
-from IPython import embed
+#from IPython import embed
 
 # Disable the InsecureRequests warning and the 'Starting new HTTPS connection' log message
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
