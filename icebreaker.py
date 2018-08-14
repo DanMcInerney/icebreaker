@@ -27,7 +27,7 @@ from libnmap.parser import NmapParser, NmapParserException
 from http.server import HTTPServer as BaseHTTPServer, SimpleHTTPRequestHandler
 
 # Debug
-#from IPython import embed
+from IPython import embed
 
 # Disable the InsecureRequests warning and the 'Starting new HTTPS connection' log message
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -129,6 +129,9 @@ def nmap_status_printer(nmap_proc):
             print_info("Nmap running: {} min".format(str(x)))
 
         time.sleep(1)
+    if nmap_proc.rc != 0:
+        print_bad(nmap_proc.stderr)
+        sys.exit()
 
 def run_nse_scripts(args, hosts):
     '''
